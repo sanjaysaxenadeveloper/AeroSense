@@ -1,116 +1,392 @@
 "use client";
 
-import React, { useState } from "react";
-import { UploadCloud, FileText, Sparkles, Database, Check } from "lucide-react";
-import { SAMPLE_DATASETS, SampleDataset } from "@/lib/sample-datasets";
+import React, { useState, useEffect } from "react";
+import {
+  UploadCloud,
+  FileText,
+  ArrowRight,
+  Check,
+  Trash2,
+  Database,
+  Globe,
+  ExternalLink,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
 
 interface DataIngestionProps {
   onAnalyze: (rawText: string, briefTitle: string) => Promise<void>;
   isLoading: boolean;
 }
 
-export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProps) {
-  const [rawText, setRawText] = useState(SAMPLE_DATASETS[0].rawText);
-  const [briefTitle, setBriefTitle] = useState(SAMPLE_DATASETS[0].name);
-  const [selectedDatasetId, setSelectedDatasetId] = useState(SAMPLE_DATASETS[0].id);
-  const [loadSuccess, setLoadSuccess] = useState(false);
+type DatasetSourceMode = "hf_aqi_india" | "custom_url";
 
-  const handleSelectSample = (dataset: SampleDataset) => {
-    setSelectedDatasetId(dataset.id);
-    setRawText(dataset.rawText);
-    setBriefTitle(dataset.name);
-    setLoadSuccess(true);
-    setTimeout(() => setLoadSuccess(false), 2000);
-  };
+export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProps) {
+  const [rawText, setRawText] = useState("");
+  const [briefTitle, setBriefTitle] = useState("");
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+
+  // Live remote dataset connector state
+  const [sourceMode, setSourceMode] = useState<DatasetSourceMode>("hf_aqi_india");
+  const [availableCities, setAvailableCities] = useState<string[]>(["Delhi"]);
+  const [selectedCity, setSelectedCity] = useState("Delhi");
+  const [selectedDate, setSelectedDate] = useState("2019-11-03");
+  const [customUrl, setCustomUrl] = useState("");
+  const [isFetchingDataset, setIsFetchingDataset] = useState(false);
+  const [datasetError, setDatasetError] = useState<string | null>(null);
+  const [datasetNotice, setDatasetNotice] = useState<{
+    message: string;
+    sourceUrl: string;
+  } | null>(null);
+
+  // Load live city index from Hugging Face stations.csv
+  useEffect(() => {
+    let cancelled = false;
+    async function loadDatasetMeta() {
+      try {
+        const res = await fetch("/api/dataset");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && Array.isArray(data.cities) && data.cities.length > 0) {
+          setAvailableCities(data.cities);
+        }
+      } catch {
+        // Non-blocking fallback keeps initial Delhi option
+      }
+    }
+    void loadDatasetMeta();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setBriefTitle(file.name.replace(/\.[^/.]+$/, ""));
+    setUploadedFileName(file.name);
+    setDatasetNotice(null);
+    setDatasetError(null);
+    if (!briefTitle.trim()) {
+      setBriefTitle(file.name.replace(/\.[^/.]+$/, ""));
+    }
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
       if (content) {
         setRawText(content);
-        setSelectedDatasetId("custom-upload");
       }
     };
     reader.readAsText(file);
   };
 
+  const handleFetchDataset = async () => {
+    setIsFetchingDataset(true);
+    setDatasetError(null);
+    setDatasetNotice(null);
+
+    try {
+      const payload =
+        sourceMode === "hf_aqi_india"
+          ? {
+              source: "hf_aqi_india",
+              city: selectedCity,
+              date: selectedDate,
+              maxRows: 30,
+            }
+          : {
+              source: "custom_url",
+              url: customUrl.trim(),
+              maxRows: 30,
+            };
+
+      const res = await fetch("/api/dataset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to fetch live dataset.");
+      }
+
+      setRawText(data.csvText || "");
+      setBriefTitle(data.title || "");
+      setUploadedFileName(null);
+      setDatasetNotice({
+        message: `Loaded ${data.rowCount} live rows (${data.title})`,
+        sourceUrl: data.sourceUrl,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to fetch live dataset.";
+      setDatasetError(msg);
+    } finally {
+      setIsFetchingDataset(false);
+    }
+  };
+
+  const handleClear = () => {
+    setRawText("");
+    setBriefTitle("");
+    setUploadedFileName(null);
+    setDatasetNotice(null);
+    setDatasetError(null);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rawText.trim()) return;
-    onAnalyze(rawText, briefTitle);
+    onAnalyze(rawText, briefTitle.trim());
   };
 
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+    <section
+      id="section-ingestion"
+      className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7"
+    >
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-5 border-b border-slate-200 gap-4">
         <div>
-          <div className="flex items-center space-x-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
-              1
-            </span>
-            <h2 className="text-lg font-semibold text-white tracking-tight">
-              Data Ingestion & Normalization
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Accepts raw, messy tables with missing readings (NA/null), inconsistent units (ppm/µg), and erratic timestamps.
+          <h2 className="text-xl font-semibold text-slate-950 tracking-tight">
+            01. Data Ingestion &amp; Normalization
+          </h2>
+          <p className="text-sm text-slate-600 mt-1 max-w-2xl">
+            Load live CPCB monitoring records from Hugging Face, fetch a public CSV URL, upload a local file, or paste messy sensor tables.
           </p>
         </div>
 
-        {/* Quick Load Built-in Datasets for Evaluators */}
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 flex items-center gap-1">
-            <Database className="w-3.5 h-3.5 text-emerald-400" />
-            Load Sample:
-          </span>
-          {SAMPLE_DATASETS.map((ds) => (
-            <button
-              key={ds.id}
-              type="button"
-              onClick={() => handleSelectSample(ds)}
-              className={`text-xs px-2.5 py-1 rounded-lg border transition font-medium ${
-                selectedDatasetId === ds.id
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/50 shadow-sm"
-                  : "bg-slate-800/80 text-slate-300 border-slate-700 hover:bg-slate-700 hover:text-white"
-              }`}
-            >
-              {ds.id === "delhi-ncr-winter-morning" ? "Delhi Morning (Messy)" : ds.id === "delhi-ncr-winter-evening" ? "Delhi Evening (Delta)" : "Mumbai MIDC"}
-            </button>
-          ))}
-        </div>
+        {(rawText || briefTitle || datasetNotice) && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors whitespace-nowrap shrink-0 self-start sm:self-auto"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Clear Input</span>
+          </button>
+        )}
       </div>
 
-      <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Live Remote Dataset Connector */}
+      <div className="mt-5 bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
+            <Database className="w-4 h-4 text-[#0D6E5C] shrink-0" />
+            <span>Live Public Dataset Connector</span>
+            <a
+              href="https://huggingface.co/datasets/AdityaaXD/AQI-Of-India"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 font-mono text-[11px] font-medium text-[#0D6E5C] hover:underline ml-1"
+            >
+              <span>AdityaaXD/AQI-Of-India</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
+          <div
+            role="tablist"
+            aria-label="Live dataset source"
+            className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 self-start sm:self-auto"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sourceMode === "hf_aqi_india"}
+              onClick={() => {
+                setSourceMode("hf_aqi_india");
+                setDatasetError(null);
+              }}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                sourceMode === "hf_aqi_india"
+                  ? "bg-[#0D6E5C] text-white"
+                  : "text-slate-600 hover:text-slate-950"
+              }`}
+            >
+              Hugging Face CPCB
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={sourceMode === "custom_url"}
+              onClick={() => {
+                setSourceMode("custom_url");
+                setDatasetError(null);
+              }}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+                sourceMode === "custom_url"
+                  ? "bg-[#0D6E5C] text-white"
+                  : "text-slate-600 hover:text-slate-950"
+              }`}
+            >
+              Public HTTPS URL
+            </button>
+          </div>
+        </div>
+
+        {sourceMode === "hf_aqi_india" ? (
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-5">
+              <label
+                htmlFor="hf-city-select"
+                className="block text-[11px] font-semibold text-slate-600 mb-1"
+              >
+                City / Monitoring Network
+              </label>
+              <select
+                id="hf-city-select"
+                value={selectedCity}
+                onChange={(e) => setSelectedCity(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
+              >
+                <option value="ALL">All Cities (India Stations)</option>
+                {availableCities.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="sm:col-span-4">
+              <label
+                htmlFor="hf-date-input"
+                className="block text-[11px] font-semibold text-slate-600 mb-1"
+              >
+                Observation Date (2015–2020)
+              </label>
+              <input
+                id="hf-date-input"
+                type="date"
+                min="2015-01-01"
+                max="2020-07-01"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
+              />
+            </div>
+
+            <div className="sm:col-span-3">
+              <button
+                type="button"
+                onClick={handleFetchDataset}
+                disabled={isFetchingDataset || !selectedDate}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 text-[#0D6E5C] ${isFetchingDataset ? "animate-spin" : ""}`}
+                />
+                <span>{isFetchingDataset ? "Fetching CSV..." : "Fetch Live CSV"}</span>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+            <div className="sm:col-span-9">
+              <label
+                htmlFor="custom-dataset-url"
+                className="block text-[11px] font-semibold text-slate-600 mb-1"
+              >
+                Public HTTPS CSV / TSV / JSON URL
+              </label>
+              <div className="relative">
+                <Globe className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  id="custom-dataset-url"
+                  type="url"
+                  value={customUrl}
+                  onChange={(e) => setCustomUrl(e.target.value)}
+                  placeholder="https://huggingface.co/datasets/AdityaaXD/AQI-Of-India/resolve/main/city_day.csv"
+                  className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
+                />
+              </div>
+            </div>
+
+            <div className="sm:col-span-3">
+              <button
+                type="button"
+                onClick={handleFetchDataset}
+                disabled={isFetchingDataset || !customUrl.trim()}
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 transition-colors disabled:opacity-50 whitespace-nowrap"
+              >
+                <RefreshCw
+                  className={`w-3.5 h-3.5 text-[#0D6E5C] ${isFetchingDataset ? "animate-spin" : ""}`}
+                />
+                <span>{isFetchingDataset ? "Fetching..." : "Fetch URL"}</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {sourceMode === "hf_aqi_india" && !datasetError && !datasetNotice && (
+          <p className="text-[11px] text-slate-500">
+            Active CPCB coverage: 2018-01-01 to 2020-06-30 across 230 Indian stations (try <span className="font-mono text-slate-700">2019-11-03</span> vs <span className="font-mono text-slate-700">2019-11-06</span> to test multi-station spikes and brief comparison).
+          </p>
+        )}
+
+        {datasetError && (
+          <div
+            role="alert"
+            className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2"
+          >
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <span>{datasetError}</span>
+          </div>
+        )}
+
+        {datasetNotice && (
+          <div
+            aria-live="polite"
+            className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex flex-wrap items-center justify-between gap-2"
+          >
+            <span className="flex items-center gap-1.5 font-medium">
+              <Check className="w-3.5 h-3.5 text-[#0D6E5C] shrink-0" />
+              <span>{datasetNotice.message}</span>
+            </span>
+            <a
+              href={datasetNotice.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0D6E5C] hover:underline"
+            >
+              <span>Inspect Source</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        )}
+      </div>
+
+      <form onSubmit={handleSubmit} className="mt-5 space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <div className="md:col-span-2">
-            <label className="block text-xs font-medium text-slate-300 mb-1">
+            <label
+              htmlFor="brief-title-input"
+              className="block text-xs font-semibold text-slate-700 mb-1.5"
+            >
               Brief Title / Ward Identification
             </label>
             <input
+              id="brief-title-input"
               type="text"
               value={briefTitle}
               onChange={(e) => setBriefTitle(e.target.value)}
-              placeholder="e.g., Delhi Ward 4 Morning Peak Monitoring"
-              className="w-full bg-slate-950/80 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
-              required
+              placeholder="Enter ward, society, or monitoring report title"
+              className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-slate-300 mb-1">
-              Upload CSV / TSV File
-            </label>
-            <label className="flex items-center justify-center space-x-2 w-full bg-slate-800/60 hover:bg-slate-800 border border-slate-700/80 border-dashed rounded-xl px-3.5 py-2.5 text-xs text-slate-300 cursor-pointer transition">
-              <UploadCloud className="w-4 h-4 text-emerald-400" />
-              <span>Choose CSV / TXT</span>
+            <span className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Upload Local File
+            </span>
+            <label className="flex items-center justify-center gap-2 w-full bg-slate-50 hover:bg-slate-100 border border-slate-300 border-dashed rounded-lg px-4 py-2.5 text-xs font-medium text-slate-700 cursor-pointer transition whitespace-nowrap">
+              <UploadCloud className="w-4 h-4 text-[#0D6E5C] shrink-0" />
+              <span className="truncate">
+                {uploadedFileName ? uploadedFileName : "Choose CSV / TSV / TXT / JSON"}
+              </span>
               <input
                 type="file"
-                accept=".csv,.tsv,.txt"
+                accept=".csv,.tsv,.txt,.json,.md"
                 onChange={handleFileUpload}
                 className="hidden"
               />
@@ -119,43 +395,44 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
         </div>
 
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium text-slate-300 flex items-center space-x-1.5">
-              <FileText className="w-3.5 h-3.5 text-slate-400" />
-              <span>Raw Tabular Data (Pasted or Uploaded)</span>
+          <div className="flex items-center justify-between mb-1.5">
+            <label
+              htmlFor="raw-data-textarea"
+              className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
+            >
+              <FileText className="w-3.5 h-3.5 text-slate-500" />
+              <span>Raw Tabular Data or Sensor Readings</span>
             </label>
-            {loadSuccess && (
-              <span className="text-[11px] text-emerald-400 flex items-center space-x-1">
-                <Check className="w-3 h-3" />
-                <span>Dataset loaded</span>
+            {uploadedFileName && (
+              <span className="text-xs font-medium text-[#0D6E5C] flex items-center gap-1">
+                <Check className="w-3.5 h-3.5" />
+                <span>File loaded</span>
               </span>
             )}
           </div>
           <textarea
-            rows={6}
+            id="raw-data-textarea"
+            rows={7}
             value={rawText}
-            onChange={(e) => {
-              setRawText(e.target.value);
-              setSelectedDatasetId("custom-input");
-            }}
-            placeholder="Paste CSV, TSV, or comma/tab-separated table here..."
-            className="w-full font-mono text-xs bg-slate-950/90 border border-slate-800 rounded-xl p-3 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition"
+            onChange={(e) => setRawText(e.target.value)}
+            placeholder="Fetch from the live Hugging Face dataset above, upload a file, or paste CSV, TSV, Markdown table, JSON array, or sensor logs here..."
+            className="w-full font-mono text-xs leading-relaxed bg-slate-50 border border-slate-300 rounded-lg p-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] transition"
             required
           />
         </div>
 
-        <div className="flex items-center justify-between pt-1">
-          <p className="text-[11px] text-slate-500">
-            Automated preprocessing parses headers, extracts units, indexes rows (`ROW_001`...), and flags sensor anomalies.
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+          <p className="text-xs text-slate-500">
+            Preprocessing standardizes units, assigns row tags (ROW_001), and flags missing or unreliable sensor readings before Gemini analysis.
           </p>
 
           <button
             type="submit"
             disabled={isLoading || !rawText.trim()}
-            className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl font-medium text-sm text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 shadow-lg shadow-emerald-900/30 disabled:opacity-50 transition"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white bg-[#0D6E5C] hover:bg-[#095446] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
           >
-            <Sparkles className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
-            <span>{isLoading ? "Analyzing Air Quality with Gemini..." : "Run AI Analysis & Briefing"}</span>
+            <span>{isLoading ? "Analyzing Air Quality..." : "Analyze & Generate Brief"}</span>
+            <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </form>

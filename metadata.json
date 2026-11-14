@@ -1,0 +1,8 @@
+{
+  "name": "AeroSense - Civic Air Quality Briefing Studio",
+  "description": "AI-driven civic intelligence turning raw, messy air quality data into actionable local interventions, traceable audits, role-based recommendations, brief comparisons, and multilingual advisories.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -12,6 +12,7 @@ export interface RawDataRow {
   humidity?: number | null;
   temp?: number | null;
   unit_pm?: string;
+  notes?: string;
   is_flagged?: boolean;
   flag_reason?: string;
   raw_text?: string;
@@ -22,6 +23,7 @@ export interface DataAuditReport {
   valid_readings_count: number;
   missing_or_corrupt_count: number;
   detected_units: string[];
+  unit_conversions?: string[];
   unreliable_readings: {
     row_id: string;
     station: string;
@@ -53,6 +55,7 @@ export interface AnalysisResult {
   brief_title: string;
   summary: string;
   overall_aqi_category: string;
+  data_health_summary?: string;
   data_health: DataAuditReport;
   hotspots: HotspotFinding[];
   general_trends: TrendFinding[];
@@ -93,9 +96,15 @@ export interface CitizenCareInstruction {
   recommendations: string[];
 }
 
+export type AdvisoryLanguage = "en" | "hi" | "mr" | "bn" | "ta" | "es";
+export type AdvisoryReadingLevel =
+  | "Grade 5 (Plain Language)"
+  | "Grade 8 (Standard)"
+  | "Technical / Specialist";
+
 export interface DualAudienceAdvisory {
-  reading_level: "Grade 5 (Plain Language)" | "Grade 8 (Standard)" | "Technical / Specialist";
-  language: "en" | "hi" | "mr" | "bn";
+  reading_level: AdvisoryReadingLevel;
+  language: AdvisoryLanguage;
   internal_briefing_note: {
     executive_overview: string;
     statutory_threshold_breaches: string[];

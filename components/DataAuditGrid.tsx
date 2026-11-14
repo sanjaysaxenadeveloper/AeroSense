@@ -1,103 +1,180 @@
 "use client";
 
 import React, { useState } from "react";
-import { AlertTriangle, CheckCircle2, Search, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Search, Info } from "lucide-react";
 import { RawDataRow, DataAuditReport } from "@/lib/types";
 
 interface DataAuditGridProps {
   rows: RawDataRow[];
   audit: DataAuditReport;
+  dataHealthSummary?: string;
   highlightedRowId?: string | null;
 }
 
-export function DataAuditGrid({ rows, audit, highlightedRowId }: DataAuditGridProps) {
+export function DataAuditGrid({
+  rows,
+  audit,
+  dataHealthSummary,
+  highlightedRowId,
+}: DataAuditGridProps) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [showFlaggedOnly, setShowFlaggedOnly] = useState(false);
+  const [filterMode, setFilterMode] = useState<"all" | "flagged">("all");
 
   const filteredRows = rows.filter((r) => {
+    if (highlightedRowId && r.row_id === highlightedRowId) return true;
     const matchesSearch =
       r.station_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.row_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       r.timestamp?.toLowerCase().includes(searchTerm.toLowerCase());
-    if (showFlaggedOnly) return matchesSearch && r.is_flagged;
+    if (filterMode === "flagged") return matchesSearch && r.is_flagged;
     return matchesSearch;
   });
 
+  const getAqiClass = (aqi: number) => {
+    if (aqi > 400) return "text-red-800 bg-red-50 border-red-200";
+    if (aqi > 300) return "text-purple-800 bg-purple-50 border-purple-200";
+    if (aqi > 200) return "text-amber-800 bg-amber-50 border-amber-200";
+    if (aqi > 100) return "text-orange-800 bg-orange-50 border-orange-200";
+    return "text-emerald-800 bg-emerald-50 border-emerald-200";
+  };
+
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-4">
+    <section
+      id="section-audit"
+      className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7"
+    >
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between pb-5 border-b border-slate-200 gap-4">
         <div>
-          <div className="flex items-center space-x-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
-              2
-            </span>
-            <h2 className="text-lg font-semibold text-white tracking-tight">
-              Traceable Data Audit & Sensor Integrity
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Every AI finding cites an underlying row. Corrupted sensors, telemetry failures, and missing units are tagged below.
+          <h2 className="text-xl font-semibold text-slate-950 tracking-tight">
+            02. Sensor Integrity &amp; Row Audit
+          </h2>
+          <p className="text-sm text-slate-600 mt-1">
+            Indexed telemetry readings with unit normalization and automated gap flagging. Click any row citation in the brief to locate its source record.
           </p>
         </div>
 
-        {/* Audit Metrics */}
-        <div className="flex items-center space-x-2">
-          <div className="px-3 py-1.5 bg-slate-800/80 border border-slate-700/80 rounded-xl text-center">
-            <span className="block text-[10px] uppercase font-semibold text-slate-400">Total Nodes</span>
-            <span className="text-sm font-bold text-white">{audit.total_readings}</span>
+        {/* Unboxed inline KPI strip with tabular numerals */}
+        <div className="flex flex-wrap items-center gap-6 text-sm shrink-0">
+          <div>
+            <span className="block text-xs text-slate-500">Total Nodes</span>
+            <span className="font-mono font-semibold text-lg text-slate-950 tabular-nums">
+              {audit.total_readings}
+            </span>
           </div>
-          <div className="px-3 py-1.5 bg-emerald-950/40 border border-emerald-800/50 rounded-xl text-center">
-            <span className="block text-[10px] uppercase font-semibold text-emerald-400">Valid</span>
-            <span className="text-sm font-bold text-emerald-300">{audit.valid_readings_count}</span>
+          <div className="h-8 w-px bg-slate-200" aria-hidden="true" />
+          <div>
+            <span className="block text-xs text-slate-500">Valid Readings</span>
+            <span className="font-mono font-semibold text-lg text-[#0D6E5C] tabular-nums">
+              {audit.valid_readings_count}
+            </span>
           </div>
-          <div className="px-3 py-1.5 bg-amber-950/40 border border-amber-800/50 rounded-xl text-center">
-            <span className="block text-[10px] uppercase font-semibold text-amber-400">Flagged Gaps</span>
-            <span className="text-sm font-bold text-amber-300">{audit.missing_or_corrupt_count}</span>
+          <div className="h-8 w-px bg-slate-200" aria-hidden="true" />
+          <div>
+            <span className="block text-xs text-slate-500">Flagged Gaps</span>
+            <span className="font-mono font-semibold text-lg text-amber-700 tabular-nums">
+              {audit.missing_or_corrupt_count}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="relative w-full sm:w-72">
-          <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+      {/* Data Health & Unit Normalization Summary (clean hairline divider, no nested card) */}
+      {(dataHealthSummary ||
+        (audit.unit_conversions && audit.unit_conversions.length > 0) ||
+        audit.detected_units.length > 0) && (
+        <div className="py-4 border-b border-slate-200 space-y-2 text-xs text-slate-700">
+          {dataHealthSummary && (
+            <div className="flex items-start gap-2">
+              <Info className="w-4 h-4 text-[#0D6E5C] shrink-0 mt-0.5" />
+              <p className="text-sm text-slate-700 leading-relaxed">{dataHealthSummary}</p>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            {audit.detected_units.length > 0 && (
+              <span>
+                Detected raw units:{" "}
+                <strong className="text-slate-800 font-medium">
+                  {audit.detected_units.join(", ")}
+                </strong>
+              </span>
+            )}
+            {audit.unit_conversions && audit.unit_conversions.length > 0 && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span className="text-slate-700">
+                  Normalized: {audit.unit_conversions.join("; ")}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Search & Segmented Filter Controls */}
+      <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative w-full sm:w-80">
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" aria-hidden="true" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search station, ID, time..."
-            className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            aria-label="Filter sensor rows by station, row ID, or timestamp"
+            placeholder="Filter by station, row ID, or time..."
+            className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
           />
         </div>
 
-        <button
-          onClick={() => setShowFlaggedOnly(!showFlaggedOnly)}
-          className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition ${
-            showFlaggedOnly
-              ? "bg-amber-500/20 text-amber-300 border-amber-500/50"
-              : "bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700"
-          }`}
+        <div
+          role="group"
+          aria-label="Row integrity filter"
+          className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg self-start sm:self-auto"
         >
-          <SlidersHorizontal className="w-3.5 h-3.5" />
-          <span>{showFlaggedOnly ? "Showing Flagged Only" : "Filter Flagged Only"}</span>
-        </button>
+          <button
+            type="button"
+            aria-pressed={filterMode === "all"}
+            onClick={() => setFilterMode("all")}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+              filterMode === "all"
+                ? "bg-white text-slate-950 shadow-sm"
+                : "text-slate-600 hover:text-slate-950"
+            }`}
+          >
+            All Rows ({rows.length})
+          </button>
+          <button
+            type="button"
+            aria-pressed={filterMode === "flagged"}
+            onClick={() => setFilterMode("flagged")}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+              filterMode === "flagged"
+                ? "bg-white text-amber-800 shadow-sm"
+                : "text-slate-600 hover:text-slate-950"
+            }`}
+          >
+            Flagged Only ({audit.missing_or_corrupt_count})
+          </button>
+        </div>
       </div>
 
-      {/* Interactive Table with Highlighting */}
-      <div className="mt-4 overflow-x-auto rounded-xl border border-slate-800 max-h-80 overflow-y-auto">
+      {/* High-Density Daylight Data Grid */}
+      <div className="mt-4 overflow-x-auto border border-slate-200 rounded-lg max-h-96 overflow-y-auto">
         <table className="w-full text-left border-collapse text-xs">
-          <thead className="bg-slate-950/90 text-slate-400 sticky top-0 border-b border-slate-800 z-10">
+          <thead className="bg-slate-50 text-slate-600 sticky top-0 border-b border-slate-200 z-10">
             <tr>
-              <th className="py-2.5 px-3 font-semibold">Row Citation</th>
+              <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Citation</th>
               <th className="py-2.5 px-3 font-semibold">Station / Location</th>
-              <th className="py-2.5 px-3 font-semibold">Timestamp</th>
-              <th className="py-2.5 px-3 font-semibold text-right">PM2.5 (µg/m³)</th>
-              <th className="py-2.5 px-3 font-semibold text-right">PM10</th>
-              <th className="py-2.5 px-3 font-semibold text-right">Est. AQI</th>
-              <th className="py-2.5 px-3 font-semibold">Integrity / Flag</th>
+              <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Timestamp</th>
+              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">
+                PM2.5 (µg/m³)
+              </th>
+              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">
+                PM10 (µg/m³)
+              </th>
+              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Est. AQI</th>
+              <th className="py-2.5 px-3 font-semibold">Integrity Status</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/60 bg-slate-900/60">
+          <tbody className="divide-y divide-slate-200 bg-white">
             {filteredRows.map((r) => {
               const isTargeted = highlightedRowId === r.row_id;
               return (
@@ -106,49 +183,54 @@ export function DataAuditGrid({ rows, audit, highlightedRowId }: DataAuditGridPr
                   id={`table-row-${r.row_id}`}
                   className={`transition-colors ${
                     isTargeted
-                      ? "bg-emerald-500/20 border-l-4 border-l-emerald-400 text-white font-medium"
+                      ? "bg-teal-50 ring-1 ring-inset ring-[#0D6E5C]/40"
                       : r.is_flagged
-                      ? "bg-amber-950/10 hover:bg-amber-950/20"
-                      : "hover:bg-slate-800/40"
+                      ? "bg-amber-50/40 hover:bg-amber-50/70"
+                      : "hover:bg-slate-50"
                   }`}
                 >
-                  <td className="py-2 px-3">
+                  <td className="py-2.5 px-3 whitespace-nowrap">
                     <span
-                      className={`font-mono text-[11px] px-1.5 py-0.5 rounded ${
+                      className={`font-mono text-[11px] px-1.5 py-0.5 rounded border ${
                         isTargeted
-                          ? "bg-emerald-400 text-slate-950 font-bold"
-                          : "bg-slate-800 text-slate-300 border border-slate-700"
+                          ? "bg-[#0D6E5C] text-white border-[#0D6E5C] font-semibold"
+                          : "bg-slate-100 text-slate-700 border-slate-200"
                       }`}
                     >
                       {r.row_id}
                     </span>
                   </td>
-                  <td className="py-2 px-3 text-slate-200 font-medium">{r.station_id}</td>
-                  <td className="py-2 px-3 text-slate-400 font-mono text-[11px]">{r.timestamp}</td>
-                  <td className="py-2 px-3 text-right font-mono">
+                  <td className="py-2.5 px-3 text-slate-900 font-medium">
+                    <div>{r.station_id}</div>
+                    {r.notes && (
+                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">{r.notes}</div>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px] tabular-nums whitespace-nowrap">
+                    {r.timestamp}
+                  </td>
+                  <td className="py-2.5 px-3 text-right font-mono tabular-nums whitespace-nowrap">
                     {r.pm2_5 != null ? (
-                      <span className={r.pm2_5 > 250 ? "text-red-400 font-semibold" : "text-slate-200"}>
+                      <span
+                        className={
+                          r.pm2_5 > 250 ? "text-red-700 font-semibold" : "text-slate-800"
+                        }
+                      >
                         {r.pm2_5}
                       </span>
                     ) : (
-                      <span className="text-amber-400 italic">Missing</span>
+                      <span className="text-amber-700 italic">Missing</span>
                     )}
                   </td>
-                  <td className="py-2 px-3 text-right font-mono text-slate-300">
-                    {r.pm10 != null ? r.pm10 : <span className="text-amber-400 italic">Missing</span>}
+                  <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700 whitespace-nowrap">
+                    {r.pm10 != null ? r.pm10 : <span className="text-amber-700 italic">Missing</span>}
                   </td>
-                  <td className="py-2 px-3 text-right font-mono">
+                  <td className="py-2.5 px-3 text-right font-mono tabular-nums whitespace-nowrap">
                     {r.aqi != null ? (
                       <span
-                        className={`px-1.5 py-0.5 rounded font-bold text-[11px] ${
-                          r.aqi > 400
-                            ? "bg-red-950 text-red-300 border border-red-800"
-                            : r.aqi > 300
-                            ? "bg-purple-950 text-purple-300 border border-purple-800"
-                            : r.aqi > 200
-                            ? "bg-orange-950 text-orange-300 border border-orange-800"
-                            : "bg-emerald-950 text-emerald-300 border border-emerald-800"
-                        }`}
+                        className={`inline-block px-1.5 py-0.5 rounded border font-semibold text-[11px] ${getAqiClass(
+                          r.aqi
+                        )}`}
                       >
                         {r.aqi}
                       </span>
@@ -156,16 +238,16 @@ export function DataAuditGrid({ rows, audit, highlightedRowId }: DataAuditGridPr
                       <span className="text-slate-500">N/A</span>
                     )}
                   </td>
-                  <td className="py-2 px-3">
+                  <td className="py-2.5 px-3">
                     {r.is_flagged ? (
-                      <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[10px]">
-                        <AlertTriangle className="w-3 h-3 text-amber-400" />
-                        <span>{r.flag_reason || "Data Gap Flagged"}</span>
+                      <span className="inline-flex items-start gap-1.5 text-amber-800 text-[11px] font-medium">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <span>{r.flag_reason || "Data gap flagged"}</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center space-x-1 text-emerald-400 text-[10px]">
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Valid</span>
+                      <span className="inline-flex items-center gap-1 text-[#0D6E5C] text-[11px] font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span>Verified</span>
                       </span>
                     )}
                   </td>

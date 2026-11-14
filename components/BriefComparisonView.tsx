@@ -1,7 +1,14 @@
 "use client";
 
-import React from "react";
-import { GitCompare, TrendingDown, TrendingUp, CheckCircle2, AlertOctagon, RefreshCw } from "lucide-react";
+import React, { useState } from "react";
+import {
+  GitCompare,
+  TrendingDown,
+  TrendingUp,
+  RefreshCw,
+  UploadCloud,
+  Database,
+} from "lucide-react";
 import { BriefComparisonResult, AnalysisResult } from "@/lib/types";
 
 interface BriefComparisonProps {
@@ -12,6 +19,8 @@ interface BriefComparisonProps {
   comparisonResult: BriefComparisonResult | null;
   isLoading: boolean;
   onRunComparison: () => void;
+  onUploadBaselineAndCompare: (rawText: string, briefTitle: string) => Promise<void>;
+  onFetchHfBaselineAndCompare: (city: string, date: string) => Promise<void>;
 }
 
 export function BriefComparisonView({
@@ -22,43 +31,62 @@ export function BriefComparisonView({
   comparisonResult,
   isLoading,
   onRunComparison,
+  onUploadBaselineAndCompare,
+  onFetchHfBaselineAndCompare,
 }: BriefComparisonProps) {
-  const getTrendColor = (trend: string) => {
+  const [baselineCity, setBaselineCity] = useState("Delhi");
+  const [baselineDate, setBaselineDate] = useState("2019-11-03");
+
+  const getTrendStyles = (trend: string) => {
     switch (trend) {
       case "IMPROVING":
-        return "bg-emerald-950 text-emerald-300 border-emerald-700";
+        return "text-emerald-800 bg-emerald-50 border-emerald-200";
       case "DETERIORATING":
-        return "bg-red-950 text-red-300 border-red-700";
+        return "text-red-800 bg-red-50 border-red-200";
       default:
-        return "bg-amber-950 text-amber-300 border-amber-700";
+        return "text-amber-800 bg-amber-50 border-amber-200";
     }
   };
 
+  const handleBaselineUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content && content.trim()) {
+        void onUploadBaselineAndCompare(content, file.name.replace(/\.[^/.]+$/, ""));
+      }
+    };
+    reader.readAsText(file);
+  };
+
   return (
-    <section className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
-      <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-800 gap-3">
+    <section
+      id="section-compare"
+      className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7"
+    >
+      <div className="flex flex-col lg:flex-row lg:items-end justify-between pb-5 border-b border-slate-200 gap-4">
         <div>
-          <div className="flex items-center space-x-2">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">
-              5
-            </span>
-            <h2 className="text-lg font-semibold text-white tracking-tight">
-              Brief Comparisons & Temporal Delta
-            </h2>
-          </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Compare the current brief against earlier monitoring runs to track emerging hotspots and verify intervention efficacy.
+          <h2 className="text-xl font-semibold text-slate-950 tracking-tight">
+            05. Brief-to-Brief Delta Comparison
+          </h2>
+          <p className="text-sm text-slate-600 mt-1">
+            Compare the current brief against an earlier monitoring run to verify what changed and whether interventions reduced exposure.
           </p>
         </div>
 
         {/* Prior Brief Selector */}
         {previousBriefs.length > 0 && (
-          <div className="flex items-center space-x-2">
-            <span className="text-xs text-slate-400">Compare With:</span>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <label htmlFor="prev-brief-select" className="text-xs font-medium text-slate-600">
+              Baseline:
+            </label>
             <select
+              id="prev-brief-select"
               value={selectedPreviousId}
               onChange={(e) => onSelectPreviousId(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+              className="bg-white border border-slate-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] max-w-xs"
             >
               {previousBriefs.map((pb) => (
                 <option key={pb.id} value={pb.id}>
@@ -68,126 +96,225 @@ export function BriefComparisonView({
             </select>
 
             <button
+              type="button"
               onClick={onRunComparison}
               disabled={isLoading || !selectedPreviousId}
-              className="px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition disabled:opacity-50 flex items-center space-x-1"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white transition disabled:opacity-50 inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
-              <span>{isLoading ? "Comparing..." : "Diff Briefs"}</span>
+              <span>{isLoading ? "Comparing..." : "Compare Briefs"}</span>
             </button>
           </div>
         )}
       </div>
 
       {previousBriefs.length === 0 ? (
-        <div className="mt-5 p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
-          <GitCompare className="w-8 h-8 mx-auto mb-2 text-slate-600" />
-          <p className="font-medium text-slate-300">Only 1 brief is currently loaded in session.</p>
-          <p className="text-[11px] text-slate-500 mt-1">
-            Load or upload another dataset (e.g. &ldquo;Delhi-NCR Post-Intervention Evening Brief&rdquo; from the samples above) to unlock the live temporal delta comparison.
-          </p>
+        <div className="mt-5 p-6 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 text-center space-y-4">
+          <div>
+            <GitCompare className="w-6 h-6 mx-auto mb-2 text-[#0D6E5C]" />
+            <p className="text-sm font-semibold text-slate-900">
+              Baseline brief saved: {currentBrief.brief_title}
+            </p>
+            <p className="text-xs text-slate-600 mt-1 max-w-xl mx-auto">
+              Analyze another dataset in Section 01 to compare automatically, upload a prior file, or pull a live baseline date from Hugging Face AQI-Of-India below.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white transition cursor-pointer whitespace-nowrap">
+              <UploadCloud className="w-4 h-4" />
+              <span>{isLoading ? "Analyzing & Comparing..." : "Upload Baseline File"}</span>
+              <input
+                type="file"
+                accept=".csv,.tsv,.txt,.json,.md"
+                onChange={handleBaselineUpload}
+                disabled={isLoading}
+                className="hidden"
+              />
+            </label>
+
+            <span className="text-xs text-slate-600 font-medium">or</span>
+
+            <div className="inline-flex flex-wrap items-center justify-center gap-2 bg-white border border-slate-200 rounded-lg p-1.5">
+              <Database className="w-3.5 h-3.5 text-[#0D6E5C] ml-1 shrink-0" aria-hidden="true" />
+              <input
+                type="text"
+                aria-label="Baseline city"
+                value={baselineCity}
+                onChange={(e) => setBaselineCity(e.target.value)}
+                placeholder="City"
+                className="w-24 bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
+              />
+              <input
+                type="date"
+                aria-label="Baseline date"
+                min="2015-01-01"
+                max="2020-07-01"
+                value={baselineDate}
+                onChange={(e) => setBaselineDate(e.target.value)}
+                className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
+              />
+              <button
+                type="button"
+                onClick={() => void onFetchHfBaselineAndCompare(baselineCity || "Delhi", baselineDate)}
+                disabled={isLoading || !baselineDate}
+                className="px-3 py-1 rounded text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition disabled:opacity-50 whitespace-nowrap"
+              >
+                {isLoading ? "Comparing..." : "Compare HF Date"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 pt-3 border-b border-slate-200 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <span className="text-xs text-slate-600">
+            Or compare <strong>{currentBrief.brief_title}</strong> against a new baseline file or Hugging Face date:
+          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition cursor-pointer whitespace-nowrap">
+              <UploadCloud className="w-3.5 h-3.5 text-[#0D6E5C]" aria-hidden="true" />
+              <span>Upload Baseline</span>
+              <input
+                type="file"
+                accept=".csv,.tsv,.txt,.json,.md"
+                onChange={handleBaselineUpload}
+                disabled={isLoading}
+                className="hidden"
+              />
+            </label>
+            <input
+              type="text"
+              aria-label="New HF baseline city"
+              value={baselineCity}
+              onChange={(e) => setBaselineCity(e.target.value)}
+              placeholder="City"
+              className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
+            />
+            <input
+              type="date"
+              aria-label="New HF baseline date"
+              min="2015-01-01"
+              max="2020-07-01"
+              value={baselineDate}
+              onChange={(e) => setBaselineDate(e.target.value)}
+              className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
+            />
+            <button
+              type="button"
+              onClick={() => void onFetchHfBaselineAndCompare(baselineCity || "Delhi", baselineDate)}
+              disabled={isLoading || !baselineDate}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition disabled:opacity-50 whitespace-nowrap"
+            >
+              Compare HF Date
+            </button>
+          </div>
+        </div>
+      )}
+
+      {previousBriefs.length > 0 && isLoading && !comparisonResult ? (
+        <div className="mt-5 space-y-4 animate-pulse">
+          <div className="h-20 bg-slate-100 rounded-lg border border-slate-200" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="h-28 bg-slate-100 rounded-lg border border-slate-200" />
+            <div className="h-28 bg-slate-100 rounded-lg border border-slate-200" />
+            <div className="h-28 bg-slate-100 rounded-lg border border-slate-200" />
+          </div>
         </div>
       ) : !comparisonResult ? (
-        <div className="mt-5 p-6 rounded-xl bg-slate-950/60 border border-slate-800 text-center">
-          <p className="text-xs text-slate-300 mb-3">
-            Ready to compare <strong>{currentBrief.brief_title}</strong> with the selected historical brief.
+        <div className="mt-5 p-6 rounded-lg border border-dashed border-slate-300 bg-slate-50/50 text-center">
+          <p className="text-sm text-slate-700 mb-3">
+            Compare <strong>{currentBrief.brief_title}</strong> against the selected baseline brief.
           </p>
           <button
+            type="button"
             onClick={onRunComparison}
             disabled={isLoading}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow transition"
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white transition disabled:opacity-50"
           >
-            {isLoading ? "Analyzing Delta..." : "Run AI Delta Analysis"}
+            {isLoading ? "Comparing..." : "Run Delta Comparison"}
           </button>
         </div>
       ) : (
-        <div className="mt-5 space-y-4">
-          {/* Header Delta Card */}
-          <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            <div>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-500">
-                Temporal Trajectory
+        <div className="mt-5 space-y-6">
+          {/* Trajectory Overview */}
+          <div className="pb-5 border-b border-slate-200 flex flex-col md:flex-row md:items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <span className="text-xs font-semibold text-slate-500">
+                Delta Summary ({comparisonResult.previous_brief_date} →{" "}
+                {comparisonResult.current_brief_date})
               </span>
-              <p className="text-sm font-semibold text-slate-200 mt-0.5">
+              <p className="text-sm text-slate-900 mt-1 leading-relaxed">
                 {comparisonResult.aqi_delta_summary}
               </p>
             </div>
-            <div className="flex items-center space-x-2">
-              <span
-                className={`px-3 py-1 rounded-xl text-xs font-bold border uppercase flex items-center space-x-1.5 ${getTrendColor(
-                  comparisonResult.overall_trend
-                )}`}
-              >
-                {comparisonResult.overall_trend === "IMPROVING" ? (
-                  <TrendingDown className="w-3.5 h-3.5" />
-                ) : (
-                  <TrendingUp className="w-3.5 h-3.5" />
-                )}
-                <span>Trend: {comparisonResult.overall_trend}</span>
-              </span>
-            </div>
+            <span
+              className={`px-3 py-1 rounded-md text-xs font-semibold border inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 ${getTrendStyles(
+                comparisonResult.overall_trend
+              )}`}
+            >
+              {comparisonResult.overall_trend === "IMPROVING" ? (
+                <TrendingDown className="w-3.5 h-3.5" />
+              ) : (
+                <TrendingUp className="w-3.5 h-3.5" />
+              )}
+              <span>Trajectory: {comparisonResult.overall_trend}</span>
+            </span>
           </div>
 
-          {/* Hotspot Movement Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Resolved */}
-            <div className="bg-emerald-950/20 border border-emerald-900/40 rounded-xl p-3.5">
-              <div className="flex items-center space-x-2 text-emerald-400 mb-2">
-                <CheckCircle2 className="w-4 h-4" />
-                <h4 className="text-xs font-semibold">Resolved Hotspots</h4>
-              </div>
+          {/* 3-Column Hotspot Dynamics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-5 border-b border-slate-200">
+            <div>
+              <h4 className="text-xs font-semibold text-[#0D6E5C] mb-2">
+                Resolved / Mitigated ({comparisonResult.resolved_hotspots.length})
+              </h4>
               {comparisonResult.resolved_hotspots.length > 0 ? (
-                <ul className="text-xs text-emerald-200/80 space-y-1 list-disc list-inside">
+                <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside">
                   {comparisonResult.resolved_hotspots.map((h, i) => (
                     <li key={i}>{h}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-[11px] text-slate-500 italic">No resolved hotspots detected.</p>
+                <p className="text-xs text-slate-500 italic">No resolved hotspots detected.</p>
               )}
             </div>
 
-            {/* Newly Emerged */}
-            <div className="bg-red-950/20 border border-red-900/40 rounded-xl p-3.5">
-              <div className="flex items-center space-x-2 text-red-400 mb-2">
-                <AlertOctagon className="w-4 h-4" />
-                <h4 className="text-xs font-semibold">Newly Emerged Hotspots</h4>
-              </div>
+            <div>
+              <h4 className="text-xs font-semibold text-red-700 mb-2">
+                Newly Emerged ({comparisonResult.new_hotspots.length})
+              </h4>
               {comparisonResult.new_hotspots.length > 0 ? (
-                <ul className="text-xs text-red-200/80 space-y-1 list-disc list-inside">
+                <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside">
                   {comparisonResult.new_hotspots.map((h, i) => (
                     <li key={i}>{h}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-[11px] text-slate-500 italic">No new hotspots emerged.</p>
+                <p className="text-xs text-slate-500 italic">No new hotspots emerged.</p>
               )}
             </div>
 
-            {/* Persistent */}
-            <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-3.5">
-              <div className="flex items-center space-x-2 text-amber-400 mb-2">
-                <GitCompare className="w-4 h-4" />
-                <h4 className="text-xs font-semibold">Persistent Chronic Hotspots</h4>
-              </div>
+            <div>
+              <h4 className="text-xs font-semibold text-amber-700 mb-2">
+                Persistent Chronic ({comparisonResult.persistent_hotspots.length})
+              </h4>
               {comparisonResult.persistent_hotspots.length > 0 ? (
-                <ul className="text-xs text-amber-200/80 space-y-1 list-disc list-inside">
+                <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside">
                   {comparisonResult.persistent_hotspots.map((h, i) => (
                     <li key={i}>{h}</li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-[11px] text-slate-500 italic">None</p>
+                <p className="text-xs text-slate-500 italic">None</p>
               )}
             </div>
           </div>
 
           {/* Intervention Efficacy Assessment */}
-          <div className="p-3.5 bg-slate-950/80 border border-slate-800 rounded-xl">
-            <h4 className="text-[11px] uppercase font-bold text-slate-400 tracking-wider mb-1">
+          <div>
+            <h4 className="text-xs font-semibold text-slate-500 mb-1">
               Intervention Efficacy Assessment
             </h4>
-            <p className="text-xs text-slate-300 leading-relaxed">
+            <p className="text-sm text-slate-800 leading-relaxed">
               {comparisonResult.intervention_efficacy_assessment}
             </p>
           </div>
