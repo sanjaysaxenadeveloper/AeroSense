@@ -10,10 +10,11 @@ const store = new Map<string, BucketEntry>();
 export function getClientIdentifier(req: NextRequest): string {
   const forwardedFor = req.headers.get("x-forwarded-for");
   if (forwardedFor) {
-    return forwardedFor.split(",")[0].trim() || "unknown";
+    const raw = forwardedFor.split(",")[0].trim().replace(/^::ffff:/i, "");
+    return (raw || "unknown").slice(0, 64);
   }
-  const realIp = req.headers.get("x-real-ip");
-  return realIp?.trim() || "local-client";
+  const realIp = req.headers.get("x-real-ip")?.trim().replace(/^::ffff:/i, "");
+  return (realIp || "local-client").slice(0, 64);
 }
 
 /**
@@ -24,6 +25,7 @@ export function checkRateLimit(
   maxRequests: number = 30,
   windowMs: number = 60_000
 ): { allowed: boolean; remaining: number; retryAfterSeconds: number } {
+  const safeId = identifier.slice(0, 128);
   const now = Date.now();
   const windowStart = now - windowMs;
 
@@ -40,7 +42,7 @@ export function checkRateLimit(
     }
   }
 
-  const existing = store.get(identifier);
+  const existing = store.get(safeId);
   const recentTimestamps = existing
     ? existing.timestamps.filter((ts) => ts > windowStart)
     : [];
@@ -48,12 +50,12 @@ export function checkRateLimit(
   if (recentTimestamps.length >= maxRequests) {
     const oldest = recentTimestamps[0] ?? now;
     const retryAfterSeconds = Math.max(1, Math.ceil((oldest + windowMs - now) / 1000));
-    store.set(identifier, { timestamps: recentTimestamps });
+    store.set(safeId, { timestamps: recentTimestamps });
     return { allowed: false, remaining: 0, retryAfterSeconds };
   }
 
   recentTimestamps.push(now);
-  store.set(identifier, { timestamps: recentTimestamps });
+  store.set(safeId, { timestamps: recentTimestamps });
 
   return {
     allowed: true,

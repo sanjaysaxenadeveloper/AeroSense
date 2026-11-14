@@ -16,7 +16,10 @@ import {
   sanitizeRowCitations,
   computeStationDeltas,
   buildCompactPromptRows,
+  toCompactAnalysisPayload,
+  computeAdvisoryReadability,
 } from "../lib/briefing-helpers.ts";
+import { estimateAqiFromPm25 } from "../lib/data-preprocessor.ts";
 
 const makeRow = (overrides: Partial<RawDataRow> = {}): RawDataRow => ({
   row_id: "ROW_001",
@@ -48,10 +51,11 @@ const makeAnalysis = (overrides: Partial<AnalysisResult> = {}): AnalysisResult =
       id: "hs_1",
       location_name: "Anand Vihar",
       severity: "HAZARDOUS",
-      peak_value: 380,
+      peak_value: "380",
       pollutant_of_concern: "PM2.5",
       timestamp: "2019-11-03 08:00",
       plain_language_summary: "Severe particulate spike.",
+      likely_cause: "Traffic congestion",
       evidence_rows: ["ROW_001"],
     },
   ],
@@ -82,8 +86,18 @@ describe("request validation and HTTP error mapping", () => {
     assert.equal(sanitizeText(12345, 20), "");
   });
 
-  it("parseJsonBody rejects malformed JSON and non-object payloads with HTTP 400", async () => {
+  it("parseJsonBody enforces byte size cap and rejects malformed or non-object payloads", async () => {
+    const oversizedReq = {
+      headers: new Headers({ "content-length": "2000000" }),
+      json: async () => ({}),
+    } as unknown as NextRequest;
+    await assert.rejects(
+      () => parseJsonBody(oversizedReq),
+      (err: unknown) => err instanceof AppHttpError && err.status === 413
+    );
+
     const badJsonReq = {
+      headers: new Headers(),
       json: async () => {
         throw new SyntaxError("Unexpected token");
       },
@@ -94,6 +108,7 @@ describe("request validation and HTTP error mapping", () => {
     );
 
     const arrayReq = {
+      headers: new Headers(),
       json: async () => [1, 2, 3],
     } as unknown as NextRequest;
     await assert.rejects(
@@ -102,13 +117,14 @@ describe("request validation and HTTP error mapping", () => {
     );
 
     const validReq = {
+      headers: new Headers({ "content-length": "42" }),
       json: async () => ({ rawText: "Station,PM2.5\nA,40" }),
     } as unknown as NextRequest;
     const parsed = await parseJsonBody<{ rawText: string }>(validReq);
     assert.equal(parsed.rawText, "Station,PM2.5\nA,40");
   });
 
-  it("validates analyze, recommendations, compare, and advisory payloads", () => {
+  it("validates analyze, recommendations, compare, and advisory payloads without reflecting untrusted input", () => {
     assert.throws(
       () => validateAnalyzePayload({ rawText: "   " }),
       (err: unknown) => err instanceof AppHttpError && err.status === 400
@@ -146,8 +162,9 @@ describe("request validation and HTTP error mapping", () => {
     assert.equal(advOk.language, "hi");
 
     assert.throws(
-      () => validateAdvisoryPayload({ analysis: sampleAnalysis, language: "zz" }),
-      (err: unknown) => err instanceof AppHttpError && err.status === 400
+      () => validateAdvisoryPayload({ analysis: sampleAnalysis, language: "<script>" }),
+      (err: unknown) =>
+        err instanceof AppHttpError && err.status === 400 && !err.message.includes("<script>")
     );
 
     assert.throws(
@@ -162,7 +179,7 @@ describe("request validation and HTTP error mapping", () => {
   });
 });
 
-describe("briefing traceability and delta helpers", () => {
+describe("briefing traceability, compaction, readability, and AQI estimation helpers", () => {
   it("sanitizes row citations, deduplicates IDs, and falls back by station name", () => {
     const rows = [
       makeRow({ row_id: "ROW_001", station_id: "Anand Vihar" }),
@@ -202,7 +219,22 @@ describe("briefing traceability and delta helpers", () => {
     assert.match(deltas[2], /Dwarka: New station in current brief/);
   });
 
-  it("formats compact prompt rows within maxRows cap", () => {
+  it("compacts analysis payloads cleanly by stripping verbose raw_text and slicing rows", () => {
+    const analysis = makeAnalysis({
+      indexed_rows: Array.from({ length: 150 }, (_, i) =>
+        makeRow({ row_id: `ROW_${i + 1}`, raw_text: "verbose original text payload" })
+      ),
+    });
+
+    const compactWithRows = toCompactAnalysisPayload(analysis, true);
+    assert.equal(compactWithRows.indexed_rows.length, 120);
+    assert.equal(compactWithRows.indexed_rows[0].raw_text, undefined);
+
+    const compactWithoutRows = toCompactAnalysisPayload(analysis, false);
+    assert.equal(compactWithoutRows.indexed_rows.length, 0);
+  });
+
+  it("formats compact prompt rows within maxRows cap and computes readability telemetry", () => {
     const rows = [
       makeRow({ row_id: "ROW_001", no2: 45, notes: "Peak hour" }),
       makeRow({ row_id: "ROW_002", pm2_5: null, is_flagged: true, flag_reason: "Sensor offline" }),
@@ -215,5 +247,13 @@ describe("briefing traceability and delta helpers", () => {
     const full = buildCompactPromptRows(rows, 10);
     assert.match(full, /PM2\.5:MISSING/);
     assert.match(full, /FLAG:Sensor offline/);
+
+    const metrics = computeAdvisoryReadability("Air is very unhealthy today. Stay indoors and close windows.");
+    assert.equal(metrics.wordCount, 10);
+    assert.equal(metrics.sentenceCount, 2);
+    assert.equal(metrics.avgWordsPerSentence, 5);
+
+    assert.equal(estimateAqiFromPm25(30), 50);
+    assert.equal(estimateAqiFromPm25(380), 500);
   });
 });

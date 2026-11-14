@@ -11,7 +11,9 @@ import {
   RefreshCw,
   Copy,
 } from "lucide-react";
-import {
+import { computeAdvisoryReadability } from "@/lib/briefing-helpers";
+import { ADVISORY_LANGUAGES, ADVISORY_READING_LEVELS } from "@/lib/constants";
+import type {
   DualAudienceAdvisory,
   AnalysisResult,
   AdvisoryLanguage,
@@ -161,7 +163,7 @@ export function MultiFormatAdvisoryView({
         {activeFormat === "citizen" ? (
           <div className="flex flex-wrap items-center gap-4">
             <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-slate-500 shrink-0" aria-hidden="true" />
+              <Globe className="w-4 h-4 text-slate-600 shrink-0" aria-hidden="true" />
               <label htmlFor="adv-lang" className="text-xs font-medium text-slate-600">
                 Language:
               </label>
@@ -176,17 +178,16 @@ export function MultiFormatAdvisoryView({
                 }}
                 className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] disabled:opacity-60"
               >
-                <option value="en">English</option>
-                <option value="hi">हिंदी (Hindi)</option>
-                <option value="mr">मराठी (Marathi)</option>
-                <option value="bn">বাংলা (Bengali)</option>
-                <option value="ta">தமிழ் (Tamil)</option>
-                <option value="es">Español (Spanish)</option>
+                {ADVISORY_LANGUAGES.map((lang) => (
+                  <option key={lang.code} value={lang.code}>
+                    {lang.label}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div className="flex items-center gap-2">
-              <BookOpen className="w-4 h-4 text-slate-500 shrink-0" aria-hidden="true" />
+              <BookOpen className="w-4 h-4 text-slate-600 shrink-0" aria-hidden="true" />
               <label htmlFor="adv-level" className="text-xs font-medium text-slate-600">
                 Reading Level:
               </label>
@@ -201,9 +202,11 @@ export function MultiFormatAdvisoryView({
                 }}
                 className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] disabled:opacity-60"
               >
-                <option value="Grade 5 (Plain Language)">Grade 5 (Plain Language)</option>
-                <option value="Grade 8 (Standard)">Grade 8 (Standard)</option>
-                <option value="Technical / Specialist">Technical / Specialist</option>
+                {ADVISORY_READING_LEVELS.map((lvl) => (
+                  <option key={lvl} value={lvl}>
+                    {lvl}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -219,9 +222,9 @@ export function MultiFormatAdvisoryView({
               type="button"
               onClick={handleApplyPreferences}
               disabled={isLoading}
-              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white transition disabled:opacity-50 inline-flex items-center gap-1.5 whitespace-nowrap"
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition disabled:opacity-50 inline-flex items-center gap-1.5 whitespace-nowrap"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} aria-hidden="true" />
               <span>{isLoading ? "Generating..." : "Update Advisory"}</span>
             </button>
           )}
@@ -229,12 +232,12 @@ export function MultiFormatAdvisoryView({
             <button
               type="button"
               onClick={handleCopy}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition inline-flex items-center gap-1.5 whitespace-nowrap"
+              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition inline-flex items-center gap-1.5 whitespace-nowrap"
             >
               {copied ? (
-                <Check className="w-3.5 h-3.5 text-[#0D6E5C]" />
+                <Check className="w-3.5 h-3.5 text-[#0D6E5C]" aria-hidden="true" />
               ) : (
-                <Copy className="w-3.5 h-3.5" />
+                <Copy className="w-3.5 h-3.5" aria-hidden="true" />
               )}
               <span>{copied ? "Copied" : "Copy Text"}</span>
             </button>
@@ -242,9 +245,9 @@ export function MultiFormatAdvisoryView({
           <button
             type="button"
             onClick={handlePrint}
-            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-300 transition inline-flex items-center gap-1.5 whitespace-nowrap"
+            className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition inline-flex items-center gap-1.5 whitespace-nowrap"
           >
-            <Printer className="w-3.5 h-3.5" />
+            <Printer className="w-3.5 h-3.5" aria-hidden="true" />
             <span>Print / PDF</span>
           </button>
         </div>
@@ -281,13 +284,22 @@ export function MultiFormatAdvisoryView({
           className="mt-5 space-y-6"
         >
           <div className="pb-5 border-b border-slate-200">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mb-2">
-              <span className="font-semibold text-red-700">Public Air Quality Advisory</span>
-              <span aria-hidden="true">·</span>
-              <span>Language: {advisory.language.toUpperCase()}</span>
-              <span aria-hidden="true">·</span>
-              <span>{advisory.reading_level}</span>
-            </div>
+            {(() => {
+              const metrics = computeAdvisoryReadability(advisory.citizen_advisory.alert_summary);
+              return (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mb-2">
+                  <span className="font-semibold text-red-700">Public Air Quality Advisory</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Language: {advisory.language.toUpperCase()}</span>
+                  <span aria-hidden="true">·</span>
+                  <span>{advisory.reading_level}</span>
+                  <span aria-hidden="true">·</span>
+                  <span className="font-mono tabular-nums">
+                    {metrics.wordCount} words ({metrics.avgWordsPerSentence} words/sentence)
+                  </span>
+                </div>
+              );
+            })()}
             <h3 className="text-lg font-bold text-slate-950 tracking-tight">
               {advisory.citizen_advisory.headline}
             </h3>

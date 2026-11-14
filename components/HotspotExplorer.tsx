@@ -2,7 +2,8 @@
 
 import React from "react";
 import { ArrowUpRight } from "lucide-react";
-import { HotspotFinding, TrendFinding } from "@/lib/types";
+import { getAqiSeverityBadgeClass } from "@/lib/constants";
+import type { HotspotFinding, TrendFinding } from "@/lib/types";
 
 interface HotspotExplorerProps {
   summary: string;
@@ -19,20 +20,7 @@ export function HotspotExplorer({
   trends,
   onSelectRowCitation,
 }: HotspotExplorerProps) {
-  const getSeverityStyles = (severity: string) => {
-    switch (severity) {
-      case "HAZARDOUS":
-        return "text-red-800 bg-red-50 border-red-200";
-      case "VERY_UNHEALTHY":
-        return "text-purple-800 bg-purple-50 border-purple-200";
-      case "UNHEALTHY":
-        return "text-amber-800 bg-amber-50 border-amber-200";
-      case "UNHEALTHY_SENSITIVE":
-        return "text-orange-800 bg-orange-50 border-orange-200";
-      default:
-        return "text-emerald-800 bg-emerald-50 border-emerald-200";
-    }
-  };
+  const getSeverityStyles = getAqiSeverityBadgeClass;
 
   return (
     <section

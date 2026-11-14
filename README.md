@@ -27,11 +27,11 @@ AeroSense invokes the official **`@google/genai`** TypeScript SDK strictly on th
 
 ## Key Capabilities
 
-1. **Zero Hardcoded Data**: Load real monitoring snapshots directly from Hugging Face (`AdityaaXD/AQI-Of-India`), fetch public `https://` CSV/JSON URLs, upload local files (`.csv`, `.tsv`, `.txt`, `.json`, `.md`), or paste unstructured sensor logs.
-2. **Traceable Row Audit (`[ROW_XXX]`)**: Deterministic preprocessing detects missing/corrupt readings (`NA`, `ERR`, `-999`, blanks), negative voltages, duplicates, and extreme outliers (`>900 µg/m³`). Clicking any row citation chip jumps directly to and highlights the underlying table record.
+1. **Zero Hardcoded Data**: Load real monitoring snapshots directly from Hugging Face (`AdityaaXD/AQI-Of-India`), fetch public `https://` CSV/JSON URLs (protected by DNS-rebinding SSRF validation and streaming byte caps), upload local files (`.csv`, `.tsv`, `.txt`, `.json`, `.md`), or paste unstructured sensor logs.
+2. **Traceable Row Audit & Formula-Safe CSV Export (`[ROW_XXX]`)**: Deterministic preprocessing detects missing/corrupt readings (`NA`, `ERR`, `-999`, blanks), negative voltages, duplicates, and extreme outliers (`>900 µg/m³`), displays secondary `NO₂`/`SO₂` telemetry, and lets officers export cleaned telemetry CSV with CWE-1236 formula-injection protection.
 3. **Role-Specific Action Matrices**: Separate remits for Municipal Ward Officers (road sweeping, anti-smog guns, construction halts), Housing Societies (DG set limits, window schedules, clean air rooms), and School Principals (outdoor sports suspension, indoor HEPA/PE, bus idling curbs).
 4. **Brief-to-Brief Trajectory Comparison**: Compare consecutive monitoring runs, upload a prior baseline file, or pull an earlier Hugging Face date (e.g., Delhi `2019-11-03` vs `2019-11-06`) right inside Section 05.
-5. **Accessible, Print-Ready Briefings**: WCAG 2.1 AA contrast and keyboard/ARIA tablist semantics, clipboard copy, and clean `@media print` layouts for Citizen Advisories and Internal Technical Memos.
+5. **Accessible, Print-Ready Briefings**: WCAG 2.1 AA contrast, sequential heading hierarchy, keyboard-navigable ARIA tablists and file inputs, readability telemetry, clipboard copy, and clean `@media print` layouts.
 
 ---
 
@@ -45,7 +45,7 @@ AeroSense invokes the official **`@google/genai`** TypeScript SDK strictly on th
 ```bash
 npm install
 npm run lint     # ESLint checks across app, lib, components, and tests
-npm test         # Automated unit & SSRF security tests (node --experimental-strip-types --test)
+npm test         # 22 unit, SSRF/DNS-rebinding, CWE-1236, and validation tests across 6 suites
 npm run build    # Production Next.js build verification
 npm run dev      # Starts dev server on http://localhost:3000
 ```

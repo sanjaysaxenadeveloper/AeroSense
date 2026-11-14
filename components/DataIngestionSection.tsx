@@ -13,6 +13,7 @@ import {
   AlertCircle,
   RefreshCw,
 } from "lucide-react";
+import { HF_AQI_DATASET, MAX_UPLOAD_BYTES } from "@/lib/constants";
 
 interface DataIngestionProps {
   onAnalyze: (rawText: string, briefTitle: string) => Promise<void>;
@@ -64,6 +65,12 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setDatasetError("Uploaded file exceeds the 500 KB limit. Please slice a smaller telemetry window.");
+      e.target.value = "";
+      return;
+    }
+
     setUploadedFileName(file.name);
     setDatasetNotice(null);
     setDatasetError(null);
@@ -76,6 +83,9 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
       if (content) {
         setRawText(content);
       }
+    };
+    reader.onerror = () => {
+      setDatasetError("Unable to read selected file. Please verify file encoding is UTF-8 text.");
     };
     reader.readAsText(file);
   };
@@ -189,16 +199,17 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
       <div className="mt-5 bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-3.5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs font-semibold text-slate-800">
-            <Database className="w-4 h-4 text-[#0D6E5C] shrink-0" />
+            <Database className="w-4 h-4 text-[#0D6E5C] shrink-0" aria-hidden="true" />
             <span>Live Public Dataset Connector</span>
             <a
-              href="https://huggingface.co/datasets/AdityaaXD/AQI-Of-India"
+              href={HF_AQI_DATASET.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-mono text-[11px] font-medium text-[#0D6E5C] hover:underline ml-1"
+              className="inline-flex items-center gap-1 font-mono text-[11px] font-medium text-[#0D6E5C] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded ml-1"
             >
-              <span>AdityaaXD/AQI-Of-India</span>
-              <ExternalLink className="w-3 h-3" />
+              <span>{HF_AQI_DATASET.repo}</span>
+              <span className="sr-only"> (opens in a new tab)</span>
+              <ExternalLink className="w-3 h-3" aria-hidden="true" />
             </a>
           </div>
 
@@ -326,14 +337,14 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
                 Public HTTPS CSV / TSV / JSON URL
               </label>
               <div className="relative">
-                <Globe className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Globe className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
                 <input
                   id="custom-dataset-url"
                   type="url"
                   value={customUrl}
                   onChange={(e) => setCustomUrl(e.target.value)}
                   placeholder="https://huggingface.co/datasets/AdityaaXD/AQI-Of-India/resolve/main/city_day.csv"
-                  className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
+                  className="w-full bg-white border border-slate-300 rounded-lg pl-8 pr-3 py-2 text-xs font-mono text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
                 />
               </div>
             </div>
@@ -343,10 +354,11 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
                 type="button"
                 onClick={handleFetchDataset}
                 disabled={isFetchingDataset || !customUrl.trim()}
-                className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 transition-colors disabled:opacity-50 whitespace-nowrap"
+                className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-white hover:bg-slate-100 text-slate-900 border border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition-colors disabled:opacity-50 whitespace-nowrap"
               >
                 <RefreshCw
                   className={`w-3.5 h-3.5 text-[#0D6E5C] ${isFetchingDataset ? "animate-spin" : ""}`}
+                  aria-hidden="true"
                 />
                 <span>{isFetchingDataset ? "Fetching..." : "Fetch URL"}</span>
               </button>
@@ -356,7 +368,7 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
 
         {sourceMode === "hf_aqi_india" && !datasetError && !datasetNotice && (
           <p className="text-[11px] text-slate-600">
-            Active CPCB coverage: 2018-01-01 to 2020-06-30 across 230 Indian stations (try <span className="font-mono text-slate-800">2019-11-03</span> vs <span className="font-mono text-slate-800">2019-11-06</span> to test multi-station spikes and brief comparison).
+            Active CPCB coverage: 2018-01-01 to 2020-06-30 across 230 Indian stations (try <span className="font-mono text-slate-800">{HF_AQI_DATASET.defaultDate}</span> vs <span className="font-mono text-slate-800">{HF_AQI_DATASET.comparisonDate}</span> to test multi-station spikes and brief comparison).
           </p>
         )}
 
@@ -365,7 +377,7 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
             role="alert"
             className="p-2.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2"
           >
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" aria-hidden="true" />
             <span>{datasetError}</span>
           </div>
         )}
@@ -376,17 +388,18 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
             className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex flex-wrap items-center justify-between gap-2"
           >
             <span className="flex items-center gap-1.5 font-medium">
-              <Check className="w-3.5 h-3.5 text-[#0D6E5C] shrink-0" />
+              <Check className="w-3.5 h-3.5 text-[#0D6E5C] shrink-0" aria-hidden="true" />
               <span>{datasetNotice.message}</span>
             </span>
             <a
               href={datasetNotice.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0D6E5C] hover:underline"
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-[#0D6E5C] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded"
             >
               <span>Inspect Source</span>
-              <ExternalLink className="w-3 h-3" />
+              <span className="sr-only"> (opens in a new tab)</span>
+              <ExternalLink className="w-3 h-3" aria-hidden="true" />
             </a>
           </div>
         )}
@@ -407,7 +420,7 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
               value={briefTitle}
               onChange={(e) => setBriefTitle(e.target.value)}
               placeholder="Enter ward, society, or monitoring report title"
-              className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] transition"
+              className="w-full bg-white border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] transition"
             />
           </div>
 
@@ -415,8 +428,8 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
             <span className="block text-xs font-semibold text-slate-700 mb-1.5">
               Upload Local File
             </span>
-            <label className="flex items-center justify-center gap-2 w-full bg-slate-50 hover:bg-slate-100 border border-slate-300 border-dashed rounded-lg px-4 py-2.5 text-xs font-medium text-slate-700 cursor-pointer transition whitespace-nowrap">
-              <UploadCloud className="w-4 h-4 text-[#0D6E5C] shrink-0" />
+            <label className="flex items-center justify-center gap-2 w-full bg-slate-50 hover:bg-slate-100 border border-slate-300 border-dashed rounded-lg px-4 py-2.5 text-xs font-medium text-slate-700 cursor-pointer focus-within:ring-2 focus-within:ring-[#0D6E5C] focus-within:border-[#0D6E5C] transition whitespace-nowrap">
+              <UploadCloud className="w-4 h-4 text-[#0D6E5C] shrink-0" aria-hidden="true" />
               <span className="truncate">
                 {uploadedFileName ? uploadedFileName : "Choose CSV / TSV / TXT / JSON"}
               </span>
@@ -424,7 +437,7 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
                 type="file"
                 accept=".csv,.tsv,.txt,.json,.md"
                 onChange={handleFileUpload}
-                className="hidden"
+                className="sr-only"
               />
             </label>
           </div>
@@ -436,12 +449,12 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
               htmlFor="raw-data-textarea"
               className="text-xs font-semibold text-slate-700 flex items-center gap-1.5"
             >
-              <FileText className="w-3.5 h-3.5 text-slate-500" />
+              <FileText className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
               <span>Raw Tabular Data or Sensor Readings</span>
             </label>
             {uploadedFileName && (
               <span className="text-xs font-medium text-[#0D6E5C] flex items-center gap-1">
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>File loaded</span>
               </span>
             )}
@@ -452,7 +465,7 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
             value={rawText}
             onChange={(e) => setRawText(e.target.value)}
             placeholder="Fetch from the live Hugging Face dataset above, upload a file, or paste CSV, TSV, Markdown table, JSON array, or sensor logs here..."
-            className="w-full font-mono text-xs leading-relaxed bg-slate-50 border border-slate-300 rounded-lg p-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] transition"
+            className="w-full font-mono text-xs leading-relaxed bg-slate-50 border border-slate-300 rounded-lg p-3.5 text-slate-800 placeholder-slate-500 focus:outline-none focus:bg-white focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C] transition"
             required
           />
         </div>
@@ -465,10 +478,10 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
           <button
             type="submit"
             disabled={isLoading || !rawText.trim()}
-            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white bg-[#0D6E5C] hover:bg-[#095446] disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white bg-[#0D6E5C] hover:bg-[#095446] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] focus-visible:ring-offset-2 disabled:opacity-50 transition-colors whitespace-nowrap shrink-0"
           >
             <span>{isLoading ? "Analyzing Air Quality..." : "Analyze & Generate Brief"}</span>
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
       </form>

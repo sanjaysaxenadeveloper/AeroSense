@@ -9,6 +9,15 @@ import { RoleRecommendationsView } from "@/components/RoleRecommendationsView";
 import { BriefComparisonView } from "@/components/BriefComparisonView";
 import { MultiFormatAdvisoryView } from "@/components/MultiFormatAdvisoryView";
 import {
+  fetchBriefAnalysis,
+  fetchBriefComparison,
+  fetchDualAdvisory,
+  fetchHfDatasetCsv,
+  fetchRoleRecommendations,
+  loadSavedBriefsFromStorage,
+  saveBriefsToStorage,
+} from "@/lib/briefing-client";
+import type {
   AnalysisResult,
   RoleRecommendations,
   BriefComparisonResult,
@@ -38,23 +47,17 @@ export default function Home() {
   const [statusMessage, setStatusMessage] = useState("");
 
   // Client-side response caches to eliminate redundant repeat API/Gemini calls
+  const rolesCacheRef = useRef<Map<string, RoleRecommendations>>(new Map());
   const advisoryCacheRef = useRef<Map<string, DualAudienceAdvisory>>(new Map());
   const compareCacheRef = useRef<Map<string, BriefComparisonResult>>(new Map());
 
-  // Restore past briefs from localStorage on client mount
+  // Restore saved compact briefs on client mount
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const savedBriefs = localStorage.getItem("aerosense_saved_briefs");
-      if (savedBriefs) {
-        try {
-          const parsed = JSON.parse(savedBriefs);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setPreviousBriefs(parsed);
-            setSelectedPreviousId(parsed[0].id);
-          }
-        } catch {
-          // ignore parse errors
-        }
+      const saved = loadSavedBriefsFromStorage();
+      if (saved.length > 0) {
+        setPreviousBriefs(saved);
+        setSelectedPreviousId(saved[0].id);
       }
     }, 0);
     return () => window.clearTimeout(timer);
@@ -69,24 +72,13 @@ export default function Home() {
     setRoleRecommendations(null);
     setComparisonResult(null);
     setAdvisory(null);
+    rolesCacheRef.current.clear();
     advisoryCacheRef.current.clear();
     compareCacheRef.current.clear();
 
     try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ rawText, briefTitle }),
-      });
+      const data = await fetchBriefAnalysis(rawText, briefTitle);
 
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || "Analysis request failed.");
-      }
-
-      // Archive previous brief if one is already active
       let baselinePrevious: AnalysisResult | null =
         previousBriefs.find((b) => b.id === selectedPreviousId) || previousBriefs[0] || null;
 
@@ -98,13 +90,12 @@ export default function Home() {
         setPreviousBriefs(updatedPrevious);
         setSelectedPreviousId(currentAnalysis.id);
         baselinePrevious = currentAnalysis;
-        localStorage.setItem("aerosense_saved_briefs", JSON.stringify(updatedPrevious.slice(0, 10)));
+        saveBriefsToStorage(updatedPrevious);
       }
 
       setCurrentAnalysis(data);
       setStatusMessage(`Brief ready for ${data.brief_title}.`);
 
-      // Trigger automatic follow-up syntheses sequentially
       void autoGenerateFollowups(data, baselinePrevious);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "An unexpected error occurred.";
@@ -128,7 +119,7 @@ export default function Home() {
     await Promise.allSettled(tasks);
   };
 
-  // 2. Role Recommendations Call
+  // 2. Role Recommendations Call (with client-side cache)
   const handleGenerateRoleRecommendations = async (
     focusQuestion?: string,
     overrideAnalysis?: AnalysisResult
@@ -136,19 +127,22 @@ export default function Home() {
     const target = overrideAnalysis || currentAnalysis;
     if (!target) return;
 
-    setIsGeneratingRoles(true);
-    try {
-      const res = await fetch("/api/recommendations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ analysis: target, focusQuestion }),
-      });
+    const normalizedQuestion = focusQuestion?.trim() || "";
+    const cacheKey = `${target.id}:${normalizedQuestion || "__default__"}`;
+    const cached = rolesCacheRef.current.get(cacheKey);
+    if (cached) {
+      setRoleRecommendations(cached);
+      setStatusMessage("Loaded cached stakeholder actions.");
+      return;
+    }
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate recommendations");
+    setIsGeneratingRoles(true);
+    setStatusMessage("Generating role-tailored recommendations.");
+    try {
+      const data = await fetchRoleRecommendations(target, normalizedQuestion || undefined);
+      rolesCacheRef.current.set(cacheKey, data);
       setRoleRecommendations(data);
+      setStatusMessage("Role-tailored action plans ready.");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to generate role recommendations.";
       setErrorMessage(msg);
@@ -177,16 +171,7 @@ export default function Home() {
     setIsComparing(true);
     setStatusMessage("Comparing current brief against baseline.");
     try {
-      const res = await fetch("/api/compare", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ currentBrief: curr, previousBrief: prev }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to compare briefs");
+      const data = await fetchBriefComparison(curr, prev);
       compareCacheRef.current.set(cacheKey, data);
       setComparisonResult(data);
       setStatusMessage("Brief comparison complete.");
@@ -198,26 +183,16 @@ export default function Home() {
     }
   };
 
-  // Upload a baseline file directly from Section 05 and compare against currentAnalysis
   const handleUploadBaselineAndCompare = async (rawText: string, briefTitle: string) => {
     if (!currentAnalysis) return;
     setIsComparing(true);
     setErrorMessage(null);
     try {
-      const analyzeRes = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText, briefTitle }),
-      });
-      const baselineBrief = await analyzeRes.json();
-      if (!analyzeRes.ok) {
-        throw new Error(baselineBrief.error || "Failed to analyze baseline file.");
-      }
-
+      const baselineBrief = await fetchBriefAnalysis(rawText, briefTitle);
       const updatedPrevious = [baselineBrief, ...previousBriefs];
       setPreviousBriefs(updatedPrevious);
       setSelectedPreviousId(baselineBrief.id);
-      localStorage.setItem("aerosense_saved_briefs", JSON.stringify(updatedPrevious.slice(0, 10)));
+      saveBriefsToStorage(updatedPrevious);
 
       await handleRunComparison(currentAnalysis, baselineBrief);
     } catch (err: unknown) {
@@ -228,27 +203,12 @@ export default function Home() {
     }
   };
 
-  // Fetch an earlier Hugging Face CPCB date directly as baseline and compare against currentAnalysis
   const handleFetchHfBaselineAndCompare = async (city: string, date: string) => {
     if (!currentAnalysis) return;
     setIsComparing(true);
     setErrorMessage(null);
     try {
-      const dsRes = await fetch("/api/dataset", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: "hf_aqi_india",
-          city,
-          date,
-          maxRows: 30,
-        }),
-      });
-      const dsData = await dsRes.json();
-      if (!dsRes.ok) {
-        throw new Error(dsData.error || "Failed to fetch baseline dataset from Hugging Face.");
-      }
-
+      const dsData = await fetchHfDatasetCsv(city, date, 30);
       await handleUploadBaselineAndCompare(dsData.csvText, dsData.title);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to fetch Hugging Face baseline.";
@@ -277,16 +237,7 @@ export default function Home() {
     setIsGeneratingAdvisory(true);
     setStatusMessage(`Generating ${language.toUpperCase()} citizen advisory and internal note.`);
     try {
-      const res = await fetch("/api/advisory", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ analysis: target, language, readingLevel }),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to generate advisory");
+      const data = await fetchDualAdvisory(target, language, readingLevel);
       advisoryCacheRef.current.set(cacheKey, data);
       setAdvisory(data);
       setStatusMessage("Citizen advisory and internal briefing note ready.");
@@ -298,17 +249,13 @@ export default function Home() {
     }
   };
 
-  // Traceability Interaction: Scroll and highlight row in table
   const handleSelectRowCitation = (rowId: string) => {
     setHighlightedRowId(rowId);
     const element = document.getElementById(`table-row-${rowId}`);
     if (element) {
       element.scrollIntoView({ behavior: "smooth", block: "center" });
     } else {
-      const auditSection = document.getElementById("section-audit");
-      if (auditSection) {
-        auditSection.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      document.getElementById("section-audit")?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   };
 
@@ -320,6 +267,7 @@ export default function Home() {
     setHighlightedRowId(null);
     setErrorMessage(null);
     setStatusMessage("Workspace reset for a new briefing.");
+    rolesCacheRef.current.clear();
     advisoryCacheRef.current.clear();
     compareCacheRef.current.clear();
   };
@@ -344,14 +292,14 @@ export default function Home() {
       <Navbar hasAnalysis={Boolean(currentAnalysis)} onReset={handleReset} />
 
       <div className="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col lg:flex-row gap-8">
-        {/* Left Workspace Rail (Desktop 256px) */}
-        <aside className="lg:w-64 shrink-0 space-y-6">
+        {/* Left Workspace Rail (Desktop 256px) - uses landmark labels without pre-h1 headings */}
+        <aside aria-label="Briefing workflow and saved history" className="lg:w-64 shrink-0 space-y-6">
           <div className="bg-white border border-slate-200 rounded-xl p-5 lg:sticky lg:top-24 space-y-6">
             <div>
-              <h2 className="text-xs font-semibold text-slate-600 tracking-wide mb-3">
+              <p id="workflow-nav-heading" className="text-xs font-semibold text-slate-600 tracking-wide mb-3">
                 Briefing Workflow
-              </h2>
-              <nav aria-label="Briefing workflow steps" className="space-y-1">
+              </p>
+              <nav aria-labelledby="workflow-nav-heading" className="space-y-1">
                 {workflowSteps.map((step) => (
                   <a
                     key={step.id}
@@ -371,18 +319,17 @@ export default function Home() {
 
             {previousBriefs.length > 0 && (
               <div className="pt-5 border-t border-slate-200">
-                <h3 className="text-xs font-semibold text-slate-600 tracking-wide mb-2">
+                <p id="saved-briefs-heading" className="text-xs font-semibold text-slate-600 tracking-wide mb-2">
                   Saved Brief History ({previousBriefs.length})
-                </h3>
-                <ul className="space-y-2 text-xs">
+                </p>
+                <ul aria-labelledby="saved-briefs-heading" className="space-y-2 text-xs">
                   {previousBriefs.slice(0, 4).map((b) => (
                     <li key={b.id} className="text-slate-700 truncate">
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedPreviousId(b.id);
-                          const el = document.getElementById("section-compare");
-                          el?.scrollIntoView({ behavior: "smooth" });
+                          document.getElementById("section-compare")?.scrollIntoView({ behavior: "smooth" });
                         }}
                         className="text-left hover:text-[#0D6E5C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors truncate w-full"
                         title={b.brief_title}
@@ -404,12 +351,10 @@ export default function Home() {
 
         {/* Main Editorial Content Viewport */}
         <main id="main-content" className="flex-1 min-w-0 space-y-6">
-          {/* Screen-reader status announcer */}
           <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
             {statusMessage}
           </div>
 
-          {/* Editorial Intro Masthead */}
           <div className="pb-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-950 tracking-tight text-balance">
               Civic Air Quality Briefing Studio
@@ -419,13 +364,12 @@ export default function Home() {
             </p>
           </div>
 
-          {/* Error Banner */}
           {errorMessage && (
             <div
               role="alert"
               className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-900 text-xs flex items-start gap-3"
             >
-              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" aria-hidden="true" />
               <div>
                 <p className="font-semibold text-red-950">Analysis Request Error</p>
                 <p className="mt-0.5 text-red-800">{errorMessage}</p>
@@ -433,12 +377,10 @@ export default function Home() {
             </div>
           )}
 
-          {/* Section 01: Data Ingestion */}
           <DataIngestionSection onAnalyze={handleAnalyze} isLoading={isAnalyzing} />
 
           {currentAnalysis && (
             <>
-              {/* Section 02: Traceable Data Audit */}
               <DataAuditGrid
                 rows={currentAnalysis.indexed_rows}
                 audit={currentAnalysis.data_health}
@@ -446,7 +388,6 @@ export default function Home() {
                 highlightedRowId={highlightedRowId}
               />
 
-              {/* Section 03: Hotspots & Trends */}
               <HotspotExplorer
                 summary={currentAnalysis.summary}
                 overallCategory={currentAnalysis.overall_aqi_category}
@@ -455,7 +396,6 @@ export default function Home() {
                 onSelectRowCitation={handleSelectRowCitation}
               />
 
-              {/* Section 04: Role-Based Recommendations */}
               <RoleRecommendationsView
                 recommendations={roleRecommendations}
                 isLoading={isGeneratingRoles}
@@ -463,7 +403,6 @@ export default function Home() {
                 onSelectRowCitation={handleSelectRowCitation}
               />
 
-              {/* Section 05: Brief Comparisons */}
               <BriefComparisonView
                 currentBrief={currentAnalysis}
                 previousBriefs={previousBriefs}
@@ -476,7 +415,6 @@ export default function Home() {
                 onFetchHfBaselineAndCompare={handleFetchHfBaselineAndCompare}
               />
 
-              {/* Section 06: Multi-Format & Multilingual Advisory */}
               <MultiFormatAdvisoryView
                 analysis={currentAnalysis}
                 advisory={advisory}
@@ -486,12 +424,9 @@ export default function Home() {
             </>
           )}
 
-          {/* Quiet Editorial Footer */}
           <footer className="pt-6 pb-4 border-t border-slate-200 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span>AeroSense Civic Air Quality Briefing Studio</span>
-            <span>
-              Powered by Google Gemini structured analysis · Server-side API execution
-            </span>
+            <span>Powered by Google Gemini structured analysis · Server-side API execution</span>
           </footer>
         </main>
       </div>

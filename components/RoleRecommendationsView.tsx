@@ -161,7 +161,7 @@ export function RoleRecommendationsView({
             type="button"
             onClick={() => onGenerate()}
             disabled={isLoading}
-            className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white transition disabled:opacity-50"
+            className="px-4 py-2 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] focus-visible:ring-offset-2 transition disabled:opacity-50"
           >
             Generate Role-Based Actions
           </button>
@@ -174,7 +174,7 @@ export function RoleRecommendationsView({
             className="flex flex-col sm:flex-row gap-2.5 pb-5 border-b border-slate-200"
           >
             <div className="relative flex-1">
-              <MessageSquare className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" aria-hidden="true" />
+              <MessageSquare className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" aria-hidden="true" />
               <input
                 type="text"
                 value={focusQuestion}
@@ -187,9 +187,9 @@ export function RoleRecommendationsView({
             <button
               type="submit"
               disabled={isLoading}
-              className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition disabled:opacity-50 inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
+              className="px-4 py-2 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition disabled:opacity-50 inline-flex items-center justify-center gap-1.5 whitespace-nowrap shrink-0"
             >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} aria-hidden="true" />
               <span>{isLoading ? "Updating..." : "Tailor Actions"}</span>
             </button>
           </form>

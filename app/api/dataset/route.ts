@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Papa from "papaparse";
 import {
   validatePublicDatasetUrl,
+  assertPublicResolvableHost,
   isValidIsoDate,
   isAllowedDatasetMimeType,
 } from "@/lib/dataset-utils";
@@ -171,7 +172,7 @@ export async function GET(req: NextRequest) {
         cities: data.cities,
         totalStationRows: data.totalRows,
       },
-      { headers: { "Cache-Control": "public, max-age=300" } }
+      { headers: { "Cache-Control": "public, max-age=300, stale-while-revalidate=600" } }
     );
   } catch (err: unknown) {
     const { status, message } = getHttpErrorDetails(err);
@@ -199,6 +200,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: validation.error }, { status: 400 });
       }
       const parsedUrl = validation.url;
+      try {
+        await assertPublicResolvableHost(parsedUrl.hostname);
+      } catch (dnsErr: unknown) {
+        const msg =
+          dnsErr instanceof Error
+            ? dnsErr.message
+            : "Dataset host resolved to a restricted network address.";
+        return NextResponse.json({ error: msg }, { status: 400 });
+      }
 
       const remoteRes = await fetch(parsedUrl.toString(), {
         signal: AbortSignal.timeout(15000),
@@ -247,7 +257,7 @@ export async function POST(req: NextRequest) {
       }
 
       const lines = trimmed.split(/\r?\n/);
-      const sliced = lines.length > maxRows + 1 ? lines.slice(0, maxRows + 1).join("\n") : text;
+      const sliced = lines.length > maxRows + 1 ? lines.slice(0, maxRows + 1).join("\n") : trimmed;
 
       return NextResponse.json({
         csvText: sliced,

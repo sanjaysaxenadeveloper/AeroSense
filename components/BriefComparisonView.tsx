@@ -9,7 +9,8 @@ import {
   UploadCloud,
   Database,
 } from "lucide-react";
-import { BriefComparisonResult, AnalysisResult } from "@/lib/types";
+import { HF_AQI_DATASET, MAX_UPLOAD_BYTES } from "@/lib/constants";
+import type { BriefComparisonResult, AnalysisResult } from "@/lib/types";
 
 interface BriefComparisonProps {
   currentBrief: AnalysisResult;
@@ -34,8 +35,9 @@ export function BriefComparisonView({
   onUploadBaselineAndCompare,
   onFetchHfBaselineAndCompare,
 }: BriefComparisonProps) {
-  const [baselineCity, setBaselineCity] = useState("Delhi");
-  const [baselineDate, setBaselineDate] = useState("2019-11-03");
+  const [baselineCity, setBaselineCity] = useState<string>(HF_AQI_DATASET.defaultCity);
+  const [baselineDate, setBaselineDate] = useState<string>(HF_AQI_DATASET.defaultDate);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const getTrendStyles = (trend: string) => {
     switch (trend) {
@@ -51,12 +53,23 @@ export function BriefComparisonView({
   const handleBaselineUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadError(null);
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setUploadError("Baseline file exceeds the 500 KB upload limit.");
+      e.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const content = event.target?.result as string;
       if (content && content.trim()) {
         void onUploadBaselineAndCompare(content, file.name.replace(/\.[^/.]+$/, ""));
       }
+    };
+    reader.onerror = () => {
+      setUploadError("Unable to read baseline file.");
     };
     reader.readAsText(file);
   };
@@ -122,15 +135,15 @@ export function BriefComparisonView({
           </div>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
-            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white transition cursor-pointer whitespace-nowrap">
-              <UploadCloud className="w-4 h-4" />
+            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold bg-[#0D6E5C] hover:bg-[#095446] text-white transition cursor-pointer focus-within:ring-2 focus-within:ring-[#0D6E5C] focus-within:ring-offset-2 whitespace-nowrap">
+              <UploadCloud className="w-4 h-4" aria-hidden="true" />
               <span>{isLoading ? "Analyzing & Comparing..." : "Upload Baseline File"}</span>
               <input
                 type="file"
                 accept=".csv,.tsv,.txt,.json,.md"
                 onChange={handleBaselineUpload}
                 disabled={isLoading}
-                className="hidden"
+                className="sr-only"
               />
             </label>
 
@@ -144,71 +157,83 @@ export function BriefComparisonView({
                 value={baselineCity}
                 onChange={(e) => setBaselineCity(e.target.value)}
                 placeholder="City"
-                className="w-24 bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
+                className="w-24 bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
               />
               <input
                 type="date"
                 aria-label="Baseline date"
-                min="2015-01-01"
-                max="2020-07-01"
+                min={HF_AQI_DATASET.minDate}
+                max={HF_AQI_DATASET.maxDate}
                 value={baselineDate}
                 onChange={(e) => setBaselineDate(e.target.value)}
-                className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
+                className="bg-slate-50 border border-slate-300 rounded px-2 py-1 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
               />
               <button
                 type="button"
-                onClick={() => void onFetchHfBaselineAndCompare(baselineCity || "Delhi", baselineDate)}
+                onClick={() => void onFetchHfBaselineAndCompare(baselineCity || HF_AQI_DATASET.defaultCity, baselineDate)}
                 disabled={isLoading || !baselineDate}
-                className="px-3 py-1 rounded text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition disabled:opacity-50 whitespace-nowrap"
+                className="px-3 py-1 rounded text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition disabled:opacity-50 whitespace-nowrap"
               >
                 {isLoading ? "Comparing..." : "Compare HF Date"}
               </button>
             </div>
           </div>
+          {uploadError && (
+            <p role="alert" className="text-xs text-red-700 font-medium pt-1">
+              {uploadError}
+            </p>
+          )}
         </div>
       ) : (
-        <div className="mt-4 pt-3 border-b border-slate-200 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <span className="text-xs text-slate-600">
-            Or compare <strong>{currentBrief.brief_title}</strong> against a new baseline file or Hugging Face date:
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition cursor-pointer whitespace-nowrap">
-              <UploadCloud className="w-3.5 h-3.5 text-[#0D6E5C]" aria-hidden="true" />
-              <span>Upload Baseline</span>
+        <div className="mt-4 pt-3 border-b border-slate-200 pb-4 space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <span className="text-xs text-slate-600">
+              Or compare <strong>{currentBrief.brief_title}</strong> against a new baseline file or Hugging Face date:
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 transition cursor-pointer focus-within:ring-2 focus-within:ring-[#0D6E5C] whitespace-nowrap">
+                <UploadCloud className="w-3.5 h-3.5 text-[#0D6E5C]" aria-hidden="true" />
+                <span>Upload Baseline</span>
+                <input
+                  type="file"
+                  accept=".csv,.tsv,.txt,.json,.md"
+                  onChange={handleBaselineUpload}
+                  disabled={isLoading}
+                  className="sr-only"
+                />
+              </label>
               <input
-                type="file"
-                accept=".csv,.tsv,.txt,.json,.md"
-                onChange={handleBaselineUpload}
-                disabled={isLoading}
-                className="hidden"
+                type="text"
+                aria-label="New HF baseline city"
+                value={baselineCity}
+                onChange={(e) => setBaselineCity(e.target.value)}
+                placeholder="City"
+                className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
               />
-            </label>
-            <input
-              type="text"
-              aria-label="New HF baseline city"
-              value={baselineCity}
-              onChange={(e) => setBaselineCity(e.target.value)}
-              placeholder="City"
-              className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
-            />
-            <input
-              type="date"
-              aria-label="New HF baseline date"
-              min="2015-01-01"
-              max="2020-07-01"
-              value={baselineDate}
-              onChange={(e) => setBaselineDate(e.target.value)}
-              className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 focus:outline-none focus:border-[#0D6E5C]"
-            />
-            <button
-              type="button"
-              onClick={() => void onFetchHfBaselineAndCompare(baselineCity || "Delhi", baselineDate)}
-              disabled={isLoading || !baselineDate}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white transition disabled:opacity-50 whitespace-nowrap"
-            >
-              Compare HF Date
-            </button>
+              <input
+                type="date"
+                aria-label="New HF baseline date"
+                min={HF_AQI_DATASET.minDate}
+                max={HF_AQI_DATASET.maxDate}
+                value={baselineDate}
+                onChange={(e) => setBaselineDate(e.target.value)}
+                className="bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0D6E5C]/20 focus:border-[#0D6E5C]"
+              />
+              <button
+                type="button"
+                onClick={() => void onFetchHfBaselineAndCompare(baselineCity || HF_AQI_DATASET.defaultCity, baselineDate)}
+                disabled={isLoading || !baselineDate}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 hover:bg-slate-800 text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition disabled:opacity-50 whitespace-nowrap"
+              >
+                Compare HF Date
+              </button>
+            </div>
           </div>
+          {uploadError && (
+            <p role="alert" className="text-xs text-red-700 font-medium">
+              {uploadError}
+            </p>
+          )}
         </div>
       )}
 

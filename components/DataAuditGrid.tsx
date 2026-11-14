@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
-import { AlertTriangle, CheckCircle2, Search, Info } from "lucide-react";
-import { RawDataRow, DataAuditReport } from "@/lib/types";
+import React, { useDeferredValue, useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Download, Search, Info } from "lucide-react";
+import { buildNormalizedAuditCsv } from "@/lib/briefing-helpers";
+import { getNumericAqiBadgeClass } from "@/lib/constants";
+import type { RawDataRow, DataAuditReport } from "@/lib/types";
 
 interface DataAuditGridProps {
   rows: RawDataRow[];
@@ -18,10 +20,11 @@ export function DataAuditGrid({
   highlightedRowId,
 }: DataAuditGridProps) {
   const [searchTerm, setSearchTerm] = useState("");
+  const deferredSearch = useDeferredValue(searchTerm);
   const [filterMode, setFilterMode] = useState<"all" | "flagged">("all");
 
   const filteredRows = useMemo(() => {
-    const query = searchTerm.toLowerCase();
+    const query = deferredSearch.toLowerCase();
     return rows.filter((r) => {
       if (highlightedRowId && r.row_id === highlightedRowId) return true;
       const matchesSearch =
@@ -32,14 +35,19 @@ export function DataAuditGrid({
       if (filterMode === "flagged") return matchesSearch && r.is_flagged;
       return matchesSearch;
     });
-  }, [rows, highlightedRowId, searchTerm, filterMode]);
+  }, [rows, highlightedRowId, deferredSearch, filterMode]);
 
-  const getAqiClass = (aqi: number) => {
-    if (aqi > 400) return "text-red-800 bg-red-50 border-red-200";
-    if (aqi > 300) return "text-purple-800 bg-purple-50 border-purple-200";
-    if (aqi > 200) return "text-amber-800 bg-amber-50 border-amber-200";
-    if (aqi > 100) return "text-orange-800 bg-orange-50 border-orange-200";
-    return "text-emerald-800 bg-emerald-50 border-emerald-200";
+  const handleExportCsv = () => {
+    const csv = buildNormalizedAuditCsv(filteredRows);
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = "aerosense-normalized-audit.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -75,21 +83,21 @@ export function DataAuditGrid({
           <div className="h-8 w-px bg-slate-200" aria-hidden="true" />
           <div>
             <span className="block text-xs text-slate-600">Flagged Gaps</span>
-            <span className="font-mono font-semibold text-lg text-amber-700 tabular-nums">
+            <span className="font-mono font-semibold text-lg text-amber-800 tabular-nums">
               {audit.missing_or_corrupt_count}
             </span>
           </div>
         </div>
       </div>
 
-      {/* Data Health & Unit Normalization Summary (clean hairline divider, no nested card) */}
+      {/* Data Health & Unit Normalization Summary */}
       {(dataHealthSummary ||
         (audit.unit_conversions && audit.unit_conversions.length > 0) ||
         audit.detected_units.length > 0) && (
         <div className="py-4 border-b border-slate-200 space-y-2 text-xs text-slate-700">
           {dataHealthSummary && (
             <div className="flex items-start gap-2">
-              <Info className="w-4 h-4 text-[#0D6E5C] shrink-0 mt-0.5" />
+              <Info className="w-4 h-4 text-[#0D6E5C] shrink-0 mt-0.5" aria-hidden="true" />
               <p className="text-sm text-slate-700 leading-relaxed">{dataHealthSummary}</p>
             </div>
           )}
@@ -114,10 +122,10 @@ export function DataAuditGrid({
         </div>
       )}
 
-      {/* Search & Segmented Filter Controls */}
+      {/* Search, Segmented Filter Controls & Normalized CSV Export */}
       <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" aria-hidden="true" />
+          <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" aria-hidden="true" />
           <input
             type="text"
             value={searchTerm}
@@ -128,34 +136,46 @@ export function DataAuditGrid({
           />
         </div>
 
-        <div
-          role="group"
-          aria-label="Row integrity filter"
-          className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg self-start sm:self-auto"
-        >
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+          <div
+            role="group"
+            aria-label="Row integrity filter"
+            className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg"
+          >
+            <button
+              type="button"
+              aria-pressed={filterMode === "all"}
+              onClick={() => setFilterMode("all")}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
+                filterMode === "all"
+                  ? "bg-white text-slate-950 shadow-sm"
+                  : "text-slate-600 hover:text-slate-950"
+              }`}
+            >
+              All Rows ({rows.length})
+            </button>
+            <button
+              type="button"
+              aria-pressed={filterMode === "flagged"}
+              onClick={() => setFilterMode("flagged")}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
+                filterMode === "flagged"
+                  ? "bg-white text-amber-800 shadow-sm"
+                  : "text-slate-600 hover:text-slate-950"
+              }`}
+            >
+              Flagged Only ({audit.missing_or_corrupt_count})
+            </button>
+          </div>
+
           <button
             type="button"
-            aria-pressed={filterMode === "all"}
-            onClick={() => setFilterMode("all")}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
-              filterMode === "all"
-                ? "bg-white text-slate-950 shadow-sm"
-                : "text-slate-600 hover:text-slate-950"
-            }`}
+            onClick={handleExportCsv}
+            disabled={filteredRows.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 hover:text-slate-950 bg-slate-100 hover:bg-slate-200 border border-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition disabled:opacity-50 whitespace-nowrap"
           >
-            All Rows ({rows.length})
-          </button>
-          <button
-            type="button"
-            aria-pressed={filterMode === "flagged"}
-            onClick={() => setFilterMode("flagged")}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
-              filterMode === "flagged"
-                ? "bg-white text-amber-800 shadow-sm"
-                : "text-slate-600 hover:text-slate-950"
-            }`}
-          >
-            Flagged Only ({audit.missing_or_corrupt_count})
+            <Download className="w-3.5 h-3.5 text-[#0D6E5C]" aria-hidden="true" />
+            <span>Export Cleaned CSV</span>
           </button>
         </div>
       </div>
@@ -164,8 +184,13 @@ export function DataAuditGrid({
         Showing {filteredRows.length} of {rows.length} sensor rows
       </span>
 
-      {/* High-Density Daylight Data Grid */}
-      <div className="mt-4 overflow-x-auto border border-slate-200 rounded-lg max-h-96 overflow-y-auto">
+      {/* High-Density Daylight Data Grid (keyboard-scrollable region) */}
+      <div
+        tabIndex={0}
+        role="region"
+        aria-label="Indexed sensor readings audit table"
+        className="mt-4 overflow-x-auto border border-slate-200 rounded-lg max-h-96 overflow-y-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C]"
+      >
         <table className="w-full text-left border-collapse text-xs">
           <caption className="sr-only">
             Indexed sensor integrity and normalized air quality readings
@@ -213,6 +238,13 @@ export function DataAuditGrid({
                   </td>
                   <td className="py-2.5 px-3 text-slate-900 font-medium">
                     <div>{r.station_id}</div>
+                    {(r.no2 != null || r.so2 != null) && (
+                      <div className="text-[11px] font-mono text-slate-600 font-normal mt-0.5 tabular-nums">
+                        {r.no2 != null ? `NO₂: ${r.no2}` : ""}
+                        {r.no2 != null && r.so2 != null ? " · " : ""}
+                        {r.so2 != null ? `SO₂: ${r.so2}` : ""}
+                      </div>
+                    )}
                     {r.notes && (
                       <div className="text-[11px] text-slate-600 font-normal mt-0.5">{r.notes}</div>
                     )}
@@ -230,16 +262,16 @@ export function DataAuditGrid({
                         {r.pm2_5}
                       </span>
                     ) : (
-                      <span className="text-amber-700 italic">Missing</span>
+                      <span className="text-amber-800 italic">Missing</span>
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-700 whitespace-nowrap">
-                    {r.pm10 != null ? r.pm10 : <span className="text-amber-700 italic">Missing</span>}
+                    {r.pm10 != null ? r.pm10 : <span className="text-amber-800 italic">Missing</span>}
                   </td>
                   <td className="py-2.5 px-3 text-right font-mono tabular-nums whitespace-nowrap">
                     {r.aqi != null ? (
                       <span
-                        className={`inline-block px-1.5 py-0.5 rounded border font-semibold text-[11px] ${getAqiClass(
+                        className={`inline-block px-1.5 py-0.5 rounded border font-semibold text-[11px] ${getNumericAqiBadgeClass(
                           r.aqi
                         )}`}
                       >
@@ -252,12 +284,12 @@ export function DataAuditGrid({
                   <td className="py-2.5 px-3">
                     {r.is_flagged ? (
                       <span className="inline-flex items-start gap-1.5 text-amber-800 text-[11px] font-medium">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-700 shrink-0 mt-0.5" aria-hidden="true" />
                         <span>{r.flag_reason || "Data gap flagged"}</span>
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[#0D6E5C] text-[11px] font-medium">
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                         <span>Verified</span>
                       </span>
                     )}

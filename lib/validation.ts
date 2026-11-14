@@ -5,6 +5,9 @@ import type {
   AnalysisResult,
 } from "./types";
 
+export const MAX_JSON_BODY_BYTES = 1_000_000;
+export const MAX_UPLOAD_BYTES = 500_000;
+
 export class AppHttpError extends Error {
   status: number;
 
@@ -45,6 +48,14 @@ export function sanitizeText(value: unknown, maxLength: number): string {
 }
 
 export async function parseJsonBody<T>(req: NextRequest): Promise<T> {
+  const contentLengthHeader = req.headers?.get("content-length");
+  if (contentLengthHeader) {
+    const declaredBytes = Number(contentLengthHeader);
+    if (Number.isFinite(declaredBytes) && declaredBytes > MAX_JSON_BODY_BYTES) {
+      throw new AppHttpError("Request payload exceeds maximum allowed size (1 MB).", 413);
+    }
+  }
+
   try {
     const body = (await req.json()) as unknown;
     if (!body || typeof body !== "object" || Array.isArray(body)) {
@@ -64,6 +75,17 @@ const VALID_READING_LEVELS = new Set<AdvisoryReadingLevel>([
   "Technical / Specialist",
 ]);
 
+function boundAnalysisPayload(analysis: AnalysisResult): AnalysisResult {
+  return {
+    ...analysis,
+    hotspots: (analysis.hotspots || []).slice(0, 50),
+    general_trends: (analysis.general_trends || []).slice(0, 30),
+    indexed_rows: Array.isArray(analysis.indexed_rows)
+      ? analysis.indexed_rows.slice(0, 250)
+      : [],
+  };
+}
+
 export function validateAnalyzePayload(body: Record<string, unknown>): {
   rawText: string;
   briefTitle: string;
@@ -72,7 +94,7 @@ export function validateAnalyzePayload(body: Record<string, unknown>): {
   if (!rawText.trim()) {
     throw new AppHttpError("No raw data provided.", 400);
   }
-  if (rawText.length > 500_000) {
+  if (rawText.length > MAX_UPLOAD_BYTES) {
     throw new AppHttpError(
       "Input exceeds 500 KB limit. Please upload or slice a smaller station window.",
       400
@@ -95,7 +117,7 @@ export function validateRecommendationsPayload(body: Record<string, unknown>): {
     );
   }
   const focusQuestion = sanitizeText(body.focusQuestion, 300);
-  return { analysis, focusQuestion };
+  return { analysis: boundAnalysisPayload(analysis), focusQuestion };
 }
 
 export function validateComparePayload(body: Record<string, unknown>): {
@@ -115,7 +137,10 @@ export function validateComparePayload(body: Record<string, unknown>): {
       400
     );
   }
-  return { currentBrief, previousBrief };
+  return {
+    currentBrief: boundAnalysisPayload(currentBrief),
+    previousBrief: boundAnalysisPayload(previousBrief),
+  };
 }
 
 export function validateAdvisoryPayload(body: Record<string, unknown>): {
@@ -134,14 +159,17 @@ export function validateAdvisoryPayload(body: Record<string, unknown>): {
       : "Grade 5 (Plain Language)";
 
   if (!VALID_LANGUAGES.has(rawLang)) {
-    throw new AppHttpError(`Unsupported advisory language: ${rawLang}`, 400);
+    throw new AppHttpError(
+      "Unsupported advisory language. Allowed codes: en, hi, mr, bn, ta, es.",
+      400
+    );
   }
   if (!VALID_READING_LEVELS.has(rawLevel)) {
-    throw new AppHttpError(`Unsupported reading level: ${rawLevel}`, 400);
+    throw new AppHttpError("Unsupported reading level selected.", 400);
   }
 
   return {
-    analysis,
+    analysis: boundAnalysisPayload(analysis),
     language: rawLang,
     readingLevel: rawLevel,
   };

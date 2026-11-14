@@ -205,10 +205,7 @@ Identify the top hotspots, establish trends with exact [ROW_XXX] citations, and 
       summary: aiResponse.summary,
       overall_aqi_category: aiResponse.overall_aqi_category || "UNHEALTHY",
       data_health_summary: aiResponse.data_health_summary,
-      data_health: {
-        ...preliminaryAudit,
-        unreliable_readings: preliminaryAudit.unreliable_readings,
-      },
+      data_health: preliminaryAudit,
       hotspots: (aiResponse.hotspots || []).map((h, i) => ({
         ...h,
         id: h.id || `HS_${i + 1}`,

@@ -31,7 +31,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 // Cooldown tracker per model so rate-limited models immediately route to healthy fallbacks
 const modelCooldownUntil = new Map<string, number>();
 
-// Bounded LRU response cache for deterministic deduplication & reduced latency/cost
+// Bounded LRU response cache + in-flight request coalescing
 interface CacheEntry {
   expiresAt: number;
   value: unknown;
@@ -39,8 +39,13 @@ interface CacheEntry {
 const MAX_CACHE_ENTRIES = 40;
 const RESPONSE_CACHE_TTL_MS = 10 * 60 * 1000;
 const responseCache = new Map<string, CacheEntry>();
+const inflightRequests = new Map<string, Promise<unknown>>();
 
-function buildCacheKey(model: string, systemInstruction: string, prompt: string): string {
+export function buildPromptCacheKey(
+  model: string,
+  systemInstruction: string,
+  prompt: string
+): string {
   return createHash("sha256")
     .update(`${model}::${systemInstruction}::${prompt}`)
     .digest("hex");
@@ -53,7 +58,6 @@ function getCachedResponse<T>(key: string): T | null {
     responseCache.delete(key);
     return null;
   }
-  // Refresh LRU order
   responseCache.delete(key);
   responseCache.set(key, entry);
   return entry.value as T;
@@ -92,98 +96,112 @@ function isTransientServerError(errMsg: string): boolean {
 
 /**
  * Executes a structured JSON prompt on Gemini with bounded LRU caching,
- * smart quota cooldowns, minimal transient retry, and cross-model resilience.
+ * in-flight request coalescing, smart quota cooldowns, and cross-model resilience.
  */
 export async function generateStructuredJson<T>(
   prompt: string,
   systemInstruction: string,
   preferredModel: string = "gemini-4-hydrogen"
 ): Promise<T> {
-  const cacheKey = buildCacheKey(preferredModel, systemInstruction, prompt);
+  const cacheKey = buildPromptCacheKey(preferredModel, systemInstruction, prompt);
   const cached = getCachedResponse<T>(cacheKey);
   if (cached !== null) {
     return cached;
   }
 
-  const ai = getGeminiClient();
+  const inflight = inflightRequests.get(cacheKey);
+  if (inflight) {
+    return inflight as Promise<T>;
+  }
 
-  const candidatePool = [preferredModel, "gemini-3.1-flash-lite", "gemini-4-hydrogen"].filter(
-    (val, idx, self) => self.indexOf(val) === idx
-  );
+  const execution = (async (): Promise<T> => {
+    const ai = getGeminiClient();
 
-  const now = Date.now();
-  const activeCandidates = candidatePool.filter(
-    (m) => (modelCooldownUntil.get(m) ?? 0) <= now
-  );
-  const modelsToTry =
-    activeCandidates.length > 0
-      ? activeCandidates
-      : ["gemini-3.1-flash-lite", "gemini-4-hydrogen"];
+    const candidatePool = [preferredModel, "gemini-3.1-flash-lite", "gemini-4-hydrogen"].filter(
+      (val, idx, self) => self.indexOf(val) === idx
+    );
 
-  let lastError: unknown = null;
-  let sawQuotaExhaustion = false;
+    const now = Date.now();
+    const activeCandidates = candidatePool.filter(
+      (m) => (modelCooldownUntil.get(m) ?? 0) <= now
+    );
+    const modelsToTry =
+      activeCandidates.length > 0
+        ? activeCandidates
+        : ["gemini-3.1-flash-lite", "gemini-4-hydrogen"];
 
-  for (const currentModel of modelsToTry) {
-    const maxAttempts = 2;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
-          model: currentModel,
-          contents: prompt,
-          config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            ...(currentModel === "gemini-4-hydrogen"
-              ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }
-              : {}),
-          },
-        });
+    let lastError: unknown = null;
+    let sawQuotaExhaustion = false;
 
-        const text = (response.text ?? "").trim();
-        if (!text) {
-          throw new Error(`Empty response returned by ${currentModel}`);
-        }
-
-        let parsed: T;
+    for (const currentModel of modelsToTry) {
+      const maxAttempts = 2;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
-          parsed = JSON.parse(text) as T;
-        } catch {
-          const cleaned = text
-            .replace(/^```json\s*/i, "")
-            .replace(/^```\s*/i, "")
-            .replace(/```$/i, "")
-            .trim();
-          parsed = JSON.parse(cleaned) as T;
-        }
+          const response = await ai.models.generateContent({
+            model: currentModel,
+            contents: prompt,
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+              ...(currentModel === "gemini-4-hydrogen"
+                ? { thinkingConfig: { thinkingLevel: ThinkingLevel.LOW } }
+                : {}),
+            },
+          });
 
-        setCachedResponse(cacheKey, parsed);
-        return parsed;
-      } catch (err: unknown) {
-        lastError = err;
-        const errMsg = err instanceof Error ? err.message : String(err);
+          const text = (response.text ?? "").trim();
+          if (!text) {
+            throw new Error(`Empty response returned by ${currentModel}`);
+          }
 
-        if (isQuotaError(errMsg)) {
-          sawQuotaExhaustion = true;
-          modelCooldownUntil.set(currentModel, Date.now() + 45_000);
+          let parsed: T;
+          try {
+            parsed = JSON.parse(text) as T;
+          } catch {
+            const cleaned = text
+              .replace(/^```json\s*/i, "")
+              .replace(/^```\s*/i, "")
+              .replace(/```$/i, "")
+              .trim();
+            parsed = JSON.parse(cleaned) as T;
+          }
+
+          setCachedResponse(cacheKey, parsed);
+          return parsed;
+        } catch (err: unknown) {
+          lastError = err;
+          const errMsg = err instanceof Error ? err.message : String(err);
+
+          if (isQuotaError(errMsg)) {
+            sawQuotaExhaustion = true;
+            modelCooldownUntil.set(currentModel, Date.now() + 45_000);
+            break;
+          }
+
+          if (isTransientServerError(errMsg) && attempt < maxAttempts) {
+            await sleep(1000);
+            continue;
+          }
+
           break;
         }
-
-        if (isTransientServerError(errMsg) && attempt < maxAttempts) {
-          await sleep(1000);
-          continue;
-        }
-
-        break;
       }
     }
-  }
 
-  if (sawQuotaExhaustion) {
-    throw new AppHttpError(
-      "Gemini API rate limit reached across active models. Please wait ~35 seconds and retry, or enable billing in Settings > Secrets for higher RPM.",
-      429
-    );
-  }
+    if (sawQuotaExhaustion) {
+      throw new AppHttpError(
+        "Gemini API rate limit reached across active models. Please wait ~35 seconds and retry, or enable billing in Settings > Secrets for higher RPM.",
+        429
+      );
+    }
 
-  throw lastError || new AppHttpError("Failed to generate content after model fallbacks.", 502);
+    throw lastError || new AppHttpError("Failed to generate content after model fallbacks.", 502);
+  })();
+
+  inflightRequests.set(cacheKey, execution);
+  try {
+    return await execution;
+  } finally {
+    inflightRequests.delete(cacheKey);
+  }
 }
