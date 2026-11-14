@@ -20,7 +20,7 @@ export function Navbar({ hasAnalysis, onReset }: NavbarProps) {
         {/* Zone 1: Single-line brand wordmark */}
         <a
           href="#top"
-          className="text-lg font-bold tracking-tight text-slate-950 whitespace-nowrap shrink-0"
+          className="text-lg font-bold tracking-tight text-slate-950 whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded"
         >
           AeroSense
         </a>
@@ -29,37 +29,37 @@ export function Navbar({ hasAnalysis, onReset }: NavbarProps) {
         <nav aria-label="Primary navigation" className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
           <a
             href="#section-ingestion"
-            className="hover:text-slate-950 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-slate-950 hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors whitespace-nowrap shrink-0"
           >
             Ingestion
           </a>
           <a
             href="#section-audit"
-            className="hover:text-slate-950 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-slate-950 hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors whitespace-nowrap shrink-0"
           >
             Audit Table
           </a>
           <a
             href="#section-hotspots"
-            className="hover:text-slate-950 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-slate-950 hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors whitespace-nowrap shrink-0"
           >
             Hotspots
           </a>
           <a
             href="#section-roles"
-            className="hover:text-slate-950 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-slate-950 hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors whitespace-nowrap shrink-0"
           >
             Role Actions
           </a>
           <a
             href="#section-compare"
-            className="hover:text-slate-950 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-slate-950 hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors whitespace-nowrap shrink-0"
           >
             Compare
           </a>
           <a
             href="#section-advisory"
-            className="hover:text-slate-950 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0"
+            className="hover:text-slate-950 hover:underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors whitespace-nowrap shrink-0"
           >
             Advisories
           </a>
@@ -71,7 +71,7 @@ export function Navbar({ hasAnalysis, onReset }: NavbarProps) {
             <button
               type="button"
               onClick={onReset}
-              className="px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg transition-colors whitespace-nowrap shrink-0"
+              className="px-4 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition-colors whitespace-nowrap shrink-0"
             >
               New Briefing
             </button>
@@ -79,7 +79,7 @@ export function Navbar({ hasAnalysis, onReset }: NavbarProps) {
             <button
               type="button"
               onClick={handleFocusIngestion}
-              className="px-4 py-2 text-xs font-semibold text-white bg-[#0D6E5C] hover:bg-[#095446] rounded-lg transition-colors whitespace-nowrap shrink-0"
+              className="px-4 py-2 text-xs font-semibold text-white bg-[#0D6E5C] hover:bg-[#095446] rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] focus-visible:ring-offset-2 transition-colors whitespace-nowrap shrink-0"
             >
               Paste or Upload Data
             </button>

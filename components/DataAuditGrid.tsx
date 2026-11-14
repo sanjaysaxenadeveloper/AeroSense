@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Search, Info } from "lucide-react";
 import { RawDataRow, DataAuditReport } from "@/lib/types";
 
@@ -20,15 +20,19 @@ export function DataAuditGrid({
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMode, setFilterMode] = useState<"all" | "flagged">("all");
 
-  const filteredRows = rows.filter((r) => {
-    if (highlightedRowId && r.row_id === highlightedRowId) return true;
-    const matchesSearch =
-      r.station_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.row_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.timestamp?.toLowerCase().includes(searchTerm.toLowerCase());
-    if (filterMode === "flagged") return matchesSearch && r.is_flagged;
-    return matchesSearch;
-  });
+  const filteredRows = useMemo(() => {
+    const query = searchTerm.toLowerCase();
+    return rows.filter((r) => {
+      if (highlightedRowId && r.row_id === highlightedRowId) return true;
+      const matchesSearch =
+        !query ||
+        r.station_id?.toLowerCase().includes(query) ||
+        r.row_id.toLowerCase().includes(query) ||
+        r.timestamp?.toLowerCase().includes(query);
+      if (filterMode === "flagged") return matchesSearch && r.is_flagged;
+      return matchesSearch;
+    });
+  }, [rows, highlightedRowId, searchTerm, filterMode]);
 
   const getAqiClass = (aqi: number) => {
     if (aqi > 400) return "text-red-800 bg-red-50 border-red-200";
@@ -56,21 +60,21 @@ export function DataAuditGrid({
         {/* Unboxed inline KPI strip with tabular numerals */}
         <div className="flex flex-wrap items-center gap-6 text-sm shrink-0">
           <div>
-            <span className="block text-xs text-slate-500">Total Nodes</span>
+            <span className="block text-xs text-slate-600">Total Nodes</span>
             <span className="font-mono font-semibold text-lg text-slate-950 tabular-nums">
               {audit.total_readings}
             </span>
           </div>
           <div className="h-8 w-px bg-slate-200" aria-hidden="true" />
           <div>
-            <span className="block text-xs text-slate-500">Valid Readings</span>
+            <span className="block text-xs text-slate-600">Valid Readings</span>
             <span className="font-mono font-semibold text-lg text-[#0D6E5C] tabular-nums">
               {audit.valid_readings_count}
             </span>
           </div>
           <div className="h-8 w-px bg-slate-200" aria-hidden="true" />
           <div>
-            <span className="block text-xs text-slate-500">Flagged Gaps</span>
+            <span className="block text-xs text-slate-600">Flagged Gaps</span>
             <span className="font-mono font-semibold text-lg text-amber-700 tabular-nums">
               {audit.missing_or_corrupt_count}
             </span>
@@ -89,7 +93,7 @@ export function DataAuditGrid({
               <p className="text-sm text-slate-700 leading-relaxed">{dataHealthSummary}</p>
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600">
             {audit.detected_units.length > 0 && (
               <span>
                 Detected raw units:{" "}
@@ -133,7 +137,7 @@ export function DataAuditGrid({
             type="button"
             aria-pressed={filterMode === "all"}
             onClick={() => setFilterMode("all")}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
               filterMode === "all"
                 ? "bg-white text-slate-950 shadow-sm"
                 : "text-slate-600 hover:text-slate-950"
@@ -145,7 +149,7 @@ export function DataAuditGrid({
             type="button"
             aria-pressed={filterMode === "flagged"}
             onClick={() => setFilterMode("flagged")}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
               filterMode === "flagged"
                 ? "bg-white text-amber-800 shadow-sm"
                 : "text-slate-600 hover:text-slate-950"
@@ -156,22 +160,29 @@ export function DataAuditGrid({
         </div>
       </div>
 
+      <span className="sr-only" aria-live="polite">
+        Showing {filteredRows.length} of {rows.length} sensor rows
+      </span>
+
       {/* High-Density Daylight Data Grid */}
       <div className="mt-4 overflow-x-auto border border-slate-200 rounded-lg max-h-96 overflow-y-auto">
         <table className="w-full text-left border-collapse text-xs">
-          <thead className="bg-slate-50 text-slate-600 sticky top-0 border-b border-slate-200 z-10">
+          <caption className="sr-only">
+            Indexed sensor integrity and normalized air quality readings
+          </caption>
+          <thead className="bg-slate-50 text-slate-700 sticky top-0 border-b border-slate-200 z-10">
             <tr>
-              <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Citation</th>
-              <th className="py-2.5 px-3 font-semibold">Station / Location</th>
-              <th className="py-2.5 px-3 font-semibold whitespace-nowrap">Timestamp</th>
-              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">
+              <th scope="col" className="py-2.5 px-3 font-semibold whitespace-nowrap">Citation</th>
+              <th scope="col" className="py-2.5 px-3 font-semibold">Station / Location</th>
+              <th scope="col" className="py-2.5 px-3 font-semibold whitespace-nowrap">Timestamp</th>
+              <th scope="col" className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">
                 PM2.5 (µg/m³)
               </th>
-              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">
+              <th scope="col" className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">
                 PM10 (µg/m³)
               </th>
-              <th className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Est. AQI</th>
-              <th className="py-2.5 px-3 font-semibold">Integrity Status</th>
+              <th scope="col" className="py-2.5 px-3 font-semibold text-right whitespace-nowrap">Est. AQI</th>
+              <th scope="col" className="py-2.5 px-3 font-semibold">Integrity Status</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 bg-white">
@@ -203,7 +214,7 @@ export function DataAuditGrid({
                   <td className="py-2.5 px-3 text-slate-900 font-medium">
                     <div>{r.station_id}</div>
                     {r.notes && (
-                      <div className="text-[11px] text-slate-500 font-normal mt-0.5">{r.notes}</div>
+                      <div className="text-[11px] text-slate-600 font-normal mt-0.5">{r.notes}</div>
                     )}
                   </td>
                   <td className="py-2.5 px-3 text-slate-600 font-mono text-[11px] tabular-nums whitespace-nowrap">
@@ -235,7 +246,7 @@ export function DataAuditGrid({
                         {r.aqi}
                       </span>
                     ) : (
-                      <span className="text-slate-500">N/A</span>
+                      <span className="text-slate-600">N/A</span>
                     )}
                   </td>
                   <td className="py-2.5 px-3">

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Navbar } from "@/components/Navbar";
 import { DataIngestionSection } from "@/components/DataIngestionSection";
 import { DataAuditGrid } from "@/components/DataAuditGrid";
@@ -35,6 +35,11 @@ export default function Home() {
   const [isComparing, setIsComparing] = useState(false);
   const [isGeneratingAdvisory, setIsGeneratingAdvisory] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState("");
+
+  // Client-side response caches to eliminate redundant repeat API/Gemini calls
+  const advisoryCacheRef = useRef<Map<string, DualAudienceAdvisory>>(new Map());
+  const compareCacheRef = useRef<Map<string, BriefComparisonResult>>(new Map());
 
   // Restore past briefs from localStorage on client mount
   useEffect(() => {
@@ -59,10 +64,13 @@ export default function Home() {
   const handleAnalyze = async (rawText: string, briefTitle: string) => {
     setIsAnalyzing(true);
     setErrorMessage(null);
+    setStatusMessage("Normalizing sensor data and generating air quality brief.");
     setHighlightedRowId(null);
     setRoleRecommendations(null);
     setComparisonResult(null);
     setAdvisory(null);
+    advisoryCacheRef.current.clear();
+    compareCacheRef.current.clear();
 
     try {
       const res = await fetch("/api/analyze", {
@@ -94,6 +102,7 @@ export default function Home() {
       }
 
       setCurrentAnalysis(data);
+      setStatusMessage(`Brief ready for ${data.brief_title}.`);
 
       // Trigger automatic follow-up syntheses sequentially
       void autoGenerateFollowups(data, baselinePrevious);
@@ -148,7 +157,7 @@ export default function Home() {
     }
   };
 
-  // 3. Brief Comparison Call
+  // 3. Brief Comparison Call (with client-side cache)
   const handleRunComparison = async (
     overrideCurrent?: AnalysisResult,
     overridePrevious?: AnalysisResult
@@ -157,7 +166,16 @@ export default function Home() {
     const prev = overridePrevious || previousBriefs.find((b) => b.id === selectedPreviousId);
     if (!curr || !prev) return;
 
+    const cacheKey = `${curr.id}:${prev.id}`;
+    const cached = compareCacheRef.current.get(cacheKey);
+    if (cached) {
+      setComparisonResult(cached);
+      setStatusMessage("Loaded cached brief comparison.");
+      return;
+    }
+
     setIsComparing(true);
+    setStatusMessage("Comparing current brief against baseline.");
     try {
       const res = await fetch("/api/compare", {
         method: "POST",
@@ -169,7 +187,9 @@ export default function Home() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to compare briefs");
+      compareCacheRef.current.set(cacheKey, data);
       setComparisonResult(data);
+      setStatusMessage("Brief comparison complete.");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to compare briefs.";
       setErrorMessage(msg);
@@ -237,7 +257,7 @@ export default function Home() {
     }
   };
 
-  // 4. Advisory Generation Call
+  // 4. Advisory Generation Call (with client-side cache per language + reading level)
   const handleGenerateAdvisory = async (
     language: AdvisoryLanguage = "en",
     readingLevel: AdvisoryReadingLevel = "Grade 5 (Plain Language)",
@@ -246,7 +266,16 @@ export default function Home() {
     const target = overrideAnalysis || currentAnalysis;
     if (!target) return;
 
+    const cacheKey = `${target.id}:${language}:${readingLevel}`;
+    const cached = advisoryCacheRef.current.get(cacheKey);
+    if (cached) {
+      setAdvisory(cached);
+      setStatusMessage(`Loaded cached ${language.toUpperCase()} advisory at ${readingLevel}.`);
+      return;
+    }
+
     setIsGeneratingAdvisory(true);
+    setStatusMessage(`Generating ${language.toUpperCase()} citizen advisory and internal note.`);
     try {
       const res = await fetch("/api/advisory", {
         method: "POST",
@@ -258,7 +287,9 @@ export default function Home() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate advisory");
+      advisoryCacheRef.current.set(cacheKey, data);
       setAdvisory(data);
+      setStatusMessage("Citizen advisory and internal briefing note ready.");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to generate advisory.";
       setErrorMessage(msg);
@@ -288,6 +319,9 @@ export default function Home() {
     setAdvisory(null);
     setHighlightedRowId(null);
     setErrorMessage(null);
+    setStatusMessage("Workspace reset for a new briefing.");
+    advisoryCacheRef.current.clear();
+    compareCacheRef.current.clear();
   };
 
   const workflowSteps = [
@@ -314,7 +348,7 @@ export default function Home() {
         <aside className="lg:w-64 shrink-0 space-y-6">
           <div className="bg-white border border-slate-200 rounded-xl p-5 lg:sticky lg:top-24 space-y-6">
             <div>
-              <h2 className="text-xs font-semibold text-slate-500 tracking-wide mb-3">
+              <h2 className="text-xs font-semibold text-slate-600 tracking-wide mb-3">
                 Briefing Workflow
               </h2>
               <nav aria-label="Briefing workflow steps" className="space-y-1">
@@ -322,13 +356,13 @@ export default function Home() {
                   <a
                     key={step.id}
                     href={`#${step.id}`}
-                    className="flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-950 transition-colors"
+                    className="flex items-center justify-between px-2.5 py-2 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition-colors"
                   >
                     <span>{step.label}</span>
                     {step.done ? (
-                      <CheckCircle2 className="w-3.5 h-3.5 text-[#0D6E5C] shrink-0" />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#0D6E5C] shrink-0" aria-hidden="true" />
                     ) : (
-                      <Circle className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                      <Circle className="w-3.5 h-3.5 text-slate-300 shrink-0" aria-hidden="true" />
                     )}
                   </a>
                 ))}
@@ -337,7 +371,7 @@ export default function Home() {
 
             {previousBriefs.length > 0 && (
               <div className="pt-5 border-t border-slate-200">
-                <h3 className="text-xs font-semibold text-slate-500 tracking-wide mb-2">
+                <h3 className="text-xs font-semibold text-slate-600 tracking-wide mb-2">
                   Saved Brief History ({previousBriefs.length})
                 </h3>
                 <ul className="space-y-2 text-xs">
@@ -350,7 +384,7 @@ export default function Home() {
                           const el = document.getElementById("section-compare");
                           el?.scrollIntoView({ behavior: "smooth" });
                         }}
-                        className="text-left hover:text-[#0D6E5C] transition-colors truncate w-full"
+                        className="text-left hover:text-[#0D6E5C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] rounded transition-colors truncate w-full"
                         title={b.brief_title}
                       >
                         {b.brief_title}
@@ -361,8 +395,8 @@ export default function Home() {
               </div>
             )}
 
-            <div className="pt-5 border-t border-slate-200 text-xs text-slate-500 space-y-1.5">
-              <p className="font-semibold text-slate-700">Target Stakeholders</p>
+            <div className="pt-5 border-t border-slate-200 text-xs text-slate-600 space-y-1.5">
+              <p className="font-semibold text-slate-800">Target Stakeholders</p>
               <p>Ward Officers · Housing Societies · School Principals · Public Health</p>
             </div>
           </div>
@@ -370,6 +404,11 @@ export default function Home() {
 
         {/* Main Editorial Content Viewport */}
         <main id="main-content" className="flex-1 min-w-0 space-y-6">
+          {/* Screen-reader status announcer */}
+          <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {statusMessage}
+          </div>
+
           {/* Editorial Intro Masthead */}
           <div className="pb-2">
             <h1 className="text-2xl sm:text-3xl font-bold text-slate-950 tracking-tight text-balance">
@@ -448,7 +487,7 @@ export default function Home() {
           )}
 
           {/* Quiet Editorial Footer */}
-          <footer className="pt-6 pb-4 border-t border-slate-200 text-xs text-slate-500 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <footer className="pt-6 pb-4 border-t border-slate-200 text-xs text-slate-600 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <span>AeroSense Civic Air Quality Briefing Studio</span>
             <span>
               Powered by Google Gemini structured analysis · Server-side API execution

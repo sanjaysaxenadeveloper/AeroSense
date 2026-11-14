@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { AppHttpError } from "./validation";
 
 /**
  * Returns an authenticated server-side GoogleGenAI client.
@@ -8,8 +10,9 @@ export function getGeminiClient(): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (!apiKey || apiKey.trim() === "") {
-    throw new Error(
-      "Missing GEMINI_API_KEY on the server. Please configure GEMINI_API_KEY in Settings > Secrets."
+    throw new AppHttpError(
+      "Missing GEMINI_API_KEY on the server. Please configure GEMINI_API_KEY in Settings > Secrets.",
+      500
     );
   }
 
@@ -27,6 +30,45 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Cooldown tracker per model so rate-limited models immediately route to healthy fallbacks
 const modelCooldownUntil = new Map<string, number>();
+
+// Bounded LRU response cache for deterministic deduplication & reduced latency/cost
+interface CacheEntry {
+  expiresAt: number;
+  value: unknown;
+}
+const MAX_CACHE_ENTRIES = 40;
+const RESPONSE_CACHE_TTL_MS = 10 * 60 * 1000;
+const responseCache = new Map<string, CacheEntry>();
+
+function buildCacheKey(model: string, systemInstruction: string, prompt: string): string {
+  return createHash("sha256")
+    .update(`${model}::${systemInstruction}::${prompt}`)
+    .digest("hex");
+}
+
+function getCachedResponse<T>(key: string): T | null {
+  const entry = responseCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) {
+    responseCache.delete(key);
+    return null;
+  }
+  // Refresh LRU order
+  responseCache.delete(key);
+  responseCache.set(key, entry);
+  return entry.value as T;
+}
+
+function setCachedResponse(key: string, value: unknown): void {
+  if (responseCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = responseCache.keys().next().value;
+    if (oldestKey) responseCache.delete(oldestKey);
+  }
+  responseCache.set(key, {
+    expiresAt: Date.now() + RESPONSE_CACHE_TTL_MS,
+    value,
+  });
+}
 
 function isQuotaError(errMsg: string): boolean {
   return (
@@ -49,14 +91,20 @@ function isTransientServerError(errMsg: string): boolean {
 }
 
 /**
- * Executes a structured JSON prompt on Gemini with smart quota cooldowns,
- * minimal transient retry, and cross-model resilience across Gemini 4 / 3.1.
+ * Executes a structured JSON prompt on Gemini with bounded LRU caching,
+ * smart quota cooldowns, minimal transient retry, and cross-model resilience.
  */
 export async function generateStructuredJson<T>(
   prompt: string,
   systemInstruction: string,
   preferredModel: string = "gemini-4-hydrogen"
 ): Promise<T> {
+  const cacheKey = buildCacheKey(preferredModel, systemInstruction, prompt);
+  const cached = getCachedResponse<T>(cacheKey);
+  if (cached !== null) {
+    return cached;
+  }
+
   const ai = getGeminiClient();
 
   const candidatePool = [preferredModel, "gemini-3.1-flash-lite", "gemini-4-hydrogen"].filter(
@@ -67,7 +115,6 @@ export async function generateStructuredJson<T>(
   const activeCandidates = candidatePool.filter(
     (m) => (modelCooldownUntil.get(m) ?? 0) <= now
   );
-  // If all models are currently in cooldown, try the highest-throughput lite model first
   const modelsToTry =
     activeCandidates.length > 0
       ? activeCandidates
@@ -97,28 +144,30 @@ export async function generateStructuredJson<T>(
           throw new Error(`Empty response returned by ${currentModel}`);
         }
 
+        let parsed: T;
         try {
-          return JSON.parse(text) as T;
+          parsed = JSON.parse(text) as T;
         } catch {
           const cleaned = text
             .replace(/^```json\s*/i, "")
             .replace(/^```\s*/i, "")
             .replace(/```$/i, "")
             .trim();
-          return JSON.parse(cleaned) as T;
+          parsed = JSON.parse(cleaned) as T;
         }
+
+        setCachedResponse(cacheKey, parsed);
+        return parsed;
       } catch (err: unknown) {
         lastError = err;
         const errMsg = err instanceof Error ? err.message : String(err);
 
-        // On 429 quota exhaustion, put this model in a 45s cooldown and immediately fall back
         if (isQuotaError(errMsg)) {
           sawQuotaExhaustion = true;
           modelCooldownUntil.set(currentModel, Date.now() + 45_000);
           break;
         }
 
-        // Only retry brief server/network hiccups once before switching candidate
         if (isTransientServerError(errMsg) && attempt < maxAttempts) {
           await sleep(1000);
           continue;
@@ -130,12 +179,11 @@ export async function generateStructuredJson<T>(
   }
 
   if (sawQuotaExhaustion) {
-    const rateLimitError = new Error(
-      "Gemini API rate limit reached across active models. Please wait ~35 seconds and retry, or enable billing in Settings > Secrets for higher RPM."
-    ) as Error & { status?: number };
-    rateLimitError.status = 429;
-    throw rateLimitError;
+    throw new AppHttpError(
+      "Gemini API rate limit reached across active models. Please wait ~35 seconds and retry, or enable billing in Settings > Secrets for higher RPM.",
+      429
+    );
   }
 
-  throw lastError || new Error("Failed to generate content after model fallbacks.");
+  throw lastError || new AppHttpError("Failed to generate content after model fallbacks.", 502);
 }

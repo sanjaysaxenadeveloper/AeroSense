@@ -18,6 +18,8 @@ interface RoleRecommendationsProps {
   onSelectRowCitation: (rowId: string) => void;
 }
 
+const PERSONA_TABS: Array<"ward" | "housing" | "school"> = ["ward", "housing", "school"];
+
 export function RoleRecommendationsView({
   recommendations,
   isLoading,
@@ -26,6 +28,21 @@ export function RoleRecommendationsView({
 }: RoleRecommendationsProps) {
   const [activeTab, setActiveTab] = useState<"ward" | "housing" | "school">("ward");
   const [focusQuestion, setFocusQuestion] = useState("");
+
+  const handleTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>, currentIdx: number) => {
+    let nextIdx = currentIdx;
+    if (e.key === "ArrowRight") nextIdx = (currentIdx + 1) % PERSONA_TABS.length;
+    else if (e.key === "ArrowLeft")
+      nextIdx = (currentIdx - 1 + PERSONA_TABS.length) % PERSONA_TABS.length;
+    else if (e.key === "Home") nextIdx = 0;
+    else if (e.key === "End") nextIdx = PERSONA_TABS.length - 1;
+    else return;
+
+    e.preventDefault();
+    const nextTab = PERSONA_TABS[nextIdx];
+    setActiveTab(nextTab);
+    document.getElementById(`tab-role-${nextTab}`)?.focus();
+  };
 
   const getUrgencyStyles = (urgency: string) => {
     if (urgency.includes("IMMEDIATE")) {
@@ -53,6 +70,7 @@ export function RoleRecommendationsView({
   return (
     <section
       id="section-roles"
+      aria-busy={isLoading}
       className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7"
     >
       <div className="flex flex-col lg:flex-row lg:items-end justify-between pb-5 border-b border-slate-200 gap-4">
@@ -72,11 +90,15 @@ export function RoleRecommendationsView({
           className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg self-start lg:self-auto shrink-0"
         >
           <button
+            id="tab-role-ward"
             type="button"
             role="tab"
             aria-selected={activeTab === "ward"}
+            aria-controls="tabpanel-role-ward"
+            tabIndex={activeTab === "ward" ? 0 : -1}
             onClick={() => setActiveTab("ward")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            onKeyDown={(e) => handleTabKeyDown(e, 0)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
               activeTab === "ward"
                 ? "bg-white text-slate-950 shadow-sm"
                 : "text-slate-600 hover:text-slate-950"
@@ -86,11 +108,15 @@ export function RoleRecommendationsView({
             <span>Ward Officer</span>
           </button>
           <button
+            id="tab-role-housing"
             type="button"
             role="tab"
             aria-selected={activeTab === "housing"}
+            aria-controls="tabpanel-role-housing"
+            tabIndex={activeTab === "housing" ? 0 : -1}
             onClick={() => setActiveTab("housing")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            onKeyDown={(e) => handleTabKeyDown(e, 1)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
               activeTab === "housing"
                 ? "bg-white text-slate-950 shadow-sm"
                 : "text-slate-600 hover:text-slate-950"
@@ -100,11 +126,15 @@ export function RoleRecommendationsView({
             <span>Housing Society</span>
           </button>
           <button
+            id="tab-role-school"
             type="button"
             role="tab"
             aria-selected={activeTab === "school"}
+            aria-controls="tabpanel-role-school"
+            tabIndex={activeTab === "school" ? 0 : -1}
             onClick={() => setActiveTab("school")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            onKeyDown={(e) => handleTabKeyDown(e, 2)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
               activeTab === "school"
                 ? "bg-white text-slate-950 shadow-sm"
                 : "text-slate-600 hover:text-slate-950"
@@ -165,7 +195,12 @@ export function RoleRecommendationsView({
           </form>
 
           {/* Active Persona Descriptor */}
-          <div role="tabpanel" aria-label="Role actions list" className="space-y-4">
+          <div
+            id={`tabpanel-role-${activeTab}`}
+            role="tabpanel"
+            aria-labelledby={`tab-role-${activeTab}`}
+            className="space-y-4"
+          >
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600">
             <span>
               Viewing remit for{" "}
@@ -177,7 +212,7 @@ export function RoleRecommendationsView({
                   : "School Principal (Pediatric Health & Campus Operations)"}
               </strong>
             </span>
-            <span className="font-mono tabular-nums text-slate-500">
+            <span className="font-mono tabular-nums text-slate-600">
               {currentActions.length} prioritized actions
             </span>
           </div>
@@ -191,7 +226,7 @@ export function RoleRecommendationsView({
               >
                 <div>
                   <div className="flex items-start justify-between gap-3 mb-2">
-                    <h4 className="text-sm font-semibold text-slate-950">{action.action_title}</h4>
+                    <h3 className="text-sm font-semibold text-slate-950">{action.action_title}</h3>
                     <span
                       className={`text-[11px] px-2 py-0.5 rounded border font-semibold whitespace-nowrap shrink-0 ${getUrgencyStyles(
                         action.urgency
@@ -218,7 +253,7 @@ export function RoleRecommendationsView({
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between gap-2 text-[11px]">
-                  <span className="text-slate-500">
+                  <span className="text-slate-600">
                     Trigger: {action.triggered_by_hotspot}
                   </span>
                   {action.evidence_rows && action.evidence_rows.length > 0 && (
@@ -228,10 +263,10 @@ export function RoleRecommendationsView({
                           key={rowId}
                           type="button"
                           onClick={() => onSelectRowCitation(rowId)}
-                          className="font-mono text-[11px] px-2 py-0.5 rounded bg-white hover:bg-teal-50 text-slate-800 hover:text-[#0D6E5C] border border-slate-300 hover:border-[#0D6E5C] transition inline-flex items-center gap-0.5 tabular-nums"
+                          className="font-mono text-[11px] px-2 py-0.5 rounded bg-white hover:bg-teal-50 text-slate-800 hover:text-[#0D6E5C] border border-slate-300 hover:border-[#0D6E5C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition inline-flex items-center gap-0.5 tabular-nums"
                         >
                           <span>{rowId}</span>
-                          <ArrowUpRight className="w-3 h-3" />
+                          <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
                         </button>
                       ))}
                     </div>

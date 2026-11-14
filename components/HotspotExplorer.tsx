@@ -50,7 +50,7 @@ export function HotspotExplorer({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs text-slate-500 font-medium">Regional Status:</span>
+          <span className="text-xs text-slate-600 font-medium">Regional Status:</span>
           <span
             className={`px-2.5 py-1 rounded-md text-xs font-semibold border whitespace-nowrap ${getSeverityStyles(
               overallCategory
@@ -63,7 +63,7 @@ export function HotspotExplorer({
 
       {/* Executive Summary (clean editorial block separated by hairline divider) */}
       <div className="py-5 border-b border-slate-200">
-        <h3 className="text-xs font-semibold text-slate-500 tracking-wide mb-1.5">
+        <h3 className="text-xs font-semibold text-slate-600 tracking-wide mb-1.5">
           Executive Briefing Summary
         </h3>
         <p className="text-base text-slate-900 leading-relaxed max-w-4xl">{summary}</p>
@@ -72,7 +72,7 @@ export function HotspotExplorer({
       {/* Regional Trends */}
       {trends.length > 0 && (
         <div className="py-5 border-b border-slate-200">
-          <h3 className="text-xs font-semibold text-slate-500 tracking-wide mb-3">
+          <h3 className="text-xs font-semibold text-slate-600 tracking-wide mb-3">
             Observed Regional Trends
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -82,16 +82,16 @@ export function HotspotExplorer({
                 <p className="text-sm text-slate-600 leading-relaxed">{t.description}</p>
                 {t.evidence_rows && t.evidence_rows.length > 0 && (
                   <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                    <span className="text-xs text-slate-500">Evidence:</span>
+                    <span className="text-xs text-slate-600">Evidence:</span>
                     {t.evidence_rows.map((rowId) => (
                       <button
                         key={rowId}
                         type="button"
                         onClick={() => onSelectRowCitation(rowId)}
-                        className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 hover:bg-teal-50 text-slate-800 hover:text-[#0D6E5C] border border-slate-200 hover:border-[#0D6E5C]/40 transition inline-flex items-center gap-0.5 tabular-nums"
+                        className="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-100 hover:bg-teal-50 text-slate-800 hover:text-[#0D6E5C] border border-slate-200 hover:border-[#0D6E5C]/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition inline-flex items-center gap-0.5 tabular-nums"
                       >
                         <span>{rowId}</span>
-                        <ArrowUpRight className="w-3 h-3" />
+                        <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
                       </button>
                     ))}
                   </div>
@@ -105,7 +105,7 @@ export function HotspotExplorer({
       {/* Critical Local Hotspots Grid */}
       <div className="pt-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xs font-semibold text-slate-500 tracking-wide">
+          <h3 className="text-xs font-semibold text-slate-600 tracking-wide">
             Identified Local Hotspots ({hotspots.length})
           </h3>
         </div>
@@ -128,12 +128,12 @@ export function HotspotExplorer({
                   </span>
                 </div>
 
-                <div className="flex items-baseline flex-wrap gap-x-2 gap-y-1 mb-2.5 text-xs text-slate-500">
+                <div className="flex items-baseline flex-wrap gap-x-2 gap-y-1 mb-2.5 text-xs text-slate-600">
                   <span className="text-base font-bold text-red-700 font-mono tabular-nums">
                     {hs.peak_value}
                   </span>
                   <span aria-hidden="true">·</span>
-                  <span className="font-medium text-slate-700">{hs.pollutant_of_concern}</span>
+                  <span className="font-medium text-slate-800">{hs.pollutant_of_concern}</span>
                   <span aria-hidden="true">·</span>
                   <span className="font-mono tabular-nums">{hs.timestamp}</span>
                 </div>
@@ -150,7 +150,7 @@ export function HotspotExplorer({
 
               {/* Traceability Row Citations */}
               <div className="mt-4 pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
-                <span className="text-[11px] text-slate-500 font-medium">Source rows</span>
+                <span className="text-[11px] text-slate-600 font-medium">Source rows</span>
                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
                   {hs.evidence_rows.map((rowId) => (
                     <button
@@ -158,10 +158,10 @@ export function HotspotExplorer({
                       type="button"
                       onClick={() => onSelectRowCitation(rowId)}
                       title={`Inspect ${rowId} in the audit table`}
-                      className="text-[11px] font-mono px-2 py-0.5 rounded bg-white hover:bg-teal-50 text-slate-800 hover:text-[#0D6E5C] border border-slate-300 hover:border-[#0D6E5C] transition inline-flex items-center gap-0.5 tabular-nums"
+                      className="text-[11px] font-mono px-2 py-0.5 rounded bg-white hover:bg-teal-50 text-slate-800 hover:text-[#0D6E5C] border border-slate-300 hover:border-[#0D6E5C] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] transition inline-flex items-center gap-0.5 tabular-nums"
                     >
                       <span>{rowId}</span>
-                      <ArrowUpRight className="w-3 h-3" />
+                      <ArrowUpRight className="w-3 h-3" aria-hidden="true" />
                     </button>
                   ))}
                 </div>

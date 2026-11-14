@@ -40,6 +40,22 @@ export function MultiFormatAdvisoryView({
     useState<AdvisoryReadingLevel>("Grade 5 (Plain Language)");
   const [copied, setCopied] = useState(false);
 
+  const handleFormatKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      const next =
+        e.key === "Home"
+          ? "citizen"
+          : e.key === "End"
+          ? "internal"
+          : activeFormat === "citizen"
+          ? "internal"
+          : "citizen";
+      setActiveFormat(next);
+      document.getElementById(`tab-format-${next}`)?.focus();
+    }
+  };
+
   const handleApplyPreferences = () => {
     onGenerateAdvisory(selectedLanguage, selectedReadingLevel);
   };
@@ -82,6 +98,7 @@ export function MultiFormatAdvisoryView({
   return (
     <section
       id="section-advisory"
+      aria-busy={isLoading}
       className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7"
     >
       <div className="flex flex-col lg:flex-row lg:items-end justify-between pb-5 border-b border-slate-200 gap-4">
@@ -101,11 +118,15 @@ export function MultiFormatAdvisoryView({
           className="flex items-center gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg self-start lg:self-auto shrink-0"
         >
           <button
+            id="tab-format-citizen"
             type="button"
             role="tab"
             aria-selected={activeFormat === "citizen"}
+            aria-controls="tabpanel-format-citizen"
+            tabIndex={activeFormat === "citizen" ? 0 : -1}
             onClick={() => setActiveFormat("citizen")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            onKeyDown={handleFormatKeyDown}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
               activeFormat === "citizen"
                 ? "bg-white text-slate-950 shadow-sm"
                 : "text-slate-600 hover:text-slate-950"
@@ -115,11 +136,15 @@ export function MultiFormatAdvisoryView({
             <span>Citizen Advisory</span>
           </button>
           <button
+            id="tab-format-internal"
             type="button"
             role="tab"
             aria-selected={activeFormat === "internal"}
+            aria-controls="tabpanel-format-internal"
+            tabIndex={activeFormat === "internal" ? 0 : -1}
             onClick={() => setActiveFormat("internal")}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 ${
+            onKeyDown={handleFormatKeyDown}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
               activeFormat === "internal"
                 ? "bg-white text-slate-950 shadow-sm"
                 : "text-slate-600 hover:text-slate-950"
@@ -249,9 +274,14 @@ export function MultiFormatAdvisoryView({
         </div>
       ) : activeFormat === "citizen" ? (
         /* CITIZEN ADVISORY VIEW */
-        <div role="tabpanel" aria-label="Citizen Advisory" className="mt-5 space-y-6">
+        <div
+          id="tabpanel-format-citizen"
+          role="tabpanel"
+          aria-labelledby="tab-format-citizen"
+          className="mt-5 space-y-6"
+        >
           <div className="pb-5 border-b border-slate-200">
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mb-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 mb-2">
               <span className="font-semibold text-red-700">Public Air Quality Advisory</span>
               <span aria-hidden="true">·</span>
               <span>Language: {advisory.language.toUpperCase()}</span>
@@ -268,7 +298,7 @@ export function MultiFormatAdvisoryView({
 
           {/* Sensitive Group Dedicated Care Grid */}
           <div className="pb-5 border-b border-slate-200">
-            <h4 className="text-xs font-semibold text-slate-500 tracking-wide mb-3">
+            <h4 className="text-xs font-semibold text-slate-600 tracking-wide mb-3">
               Guidance for Children, Older Adults &amp; Sensitive Groups
             </h4>
 
@@ -337,11 +367,16 @@ export function MultiFormatAdvisoryView({
         </div>
       ) : (
         /* INTERNAL TECHNICAL BRIEFING NOTE */
-        <div role="tabpanel" aria-label="Internal Briefing Note" className="mt-5 space-y-6">
+        <div
+          id="tabpanel-format-internal"
+          role="tabpanel"
+          aria-labelledby="tab-format-internal"
+          className="mt-5 space-y-6"
+        >
           <div className="pb-5 border-b border-slate-200">
-            <span className="text-xs font-semibold text-slate-500">
+            <h3 className="text-xs font-semibold text-slate-600">
               Internal Technical Memorandum · {analysis.brief_title}
-            </span>
+            </h3>
             <p className="text-sm text-slate-900 mt-2 leading-relaxed max-w-4xl">
               {advisory.internal_briefing_note.executive_overview}
             </p>
@@ -362,13 +397,13 @@ export function MultiFormatAdvisoryView({
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold text-amber-700 mb-2">
+              <h4 className="text-xs font-semibold text-amber-800 mb-2">
                 Sensor Network Integrity &amp; Telemetry Audit
               </h4>
               <p className="text-xs text-slate-700 leading-relaxed">
                 {advisory.internal_briefing_note.sensor_network_integrity}
               </p>
-              <div className="mt-2.5 text-xs font-mono tabular-nums text-slate-500">
+              <div className="mt-2.5 text-xs font-mono tabular-nums text-slate-600">
                 Monitored: {analysis.data_health.total_readings} stations ·{" "}
                 {analysis.data_health.missing_or_corrupt_count} data gaps flagged
               </div>
@@ -376,7 +411,7 @@ export function MultiFormatAdvisoryView({
           </div>
 
           <div>
-            <h4 className="text-xs font-semibold text-slate-500 mb-3">
+            <h4 className="text-xs font-semibold text-slate-600 mb-3">
               Cross-Departmental &amp; Inter-Agency Directives
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-700">

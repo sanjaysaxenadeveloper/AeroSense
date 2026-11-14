@@ -17,6 +17,7 @@ export function isBlockedHostname(hostname: string): boolean {
     /^172\.(1[6-9]|2\d|3[01])\./.test(lower) ||
     /^fe[89ab][0-9a-f]:/i.test(lower) ||
     /^f[cd][0-9a-f]{2}:/i.test(lower) ||
+    lower.includes("::ffff:") ||
     lower.endsWith(".local") ||
     lower.endsWith(".internal") ||
     /^\d+$/.test(lower)
@@ -37,9 +38,36 @@ export function validatePublicDatasetUrl(
     return { valid: false, error: "Invalid URL format." };
   }
 
+  if (parsedUrl.username || parsedUrl.password) {
+    return { valid: false, error: "Credentials in URLs are not allowed." };
+  }
+
+  if (parsedUrl.port && parsedUrl.port !== "443") {
+    return { valid: false, error: "Only standard HTTPS port 443 is allowed." };
+  }
+
   if (parsedUrl.protocol !== "https:" || isBlockedHostname(parsedUrl.hostname)) {
     return { valid: false, error: "Only public https:// dataset URLs are allowed." };
   }
 
   return { valid: true, url: parsedUrl };
+}
+
+export function isValidIsoDate(dateStr: unknown): dateStr is string {
+  if (typeof dateStr !== "string") return false;
+  return /^\d{4}-\d{2}-\d{2}$/.test(dateStr.trim());
+}
+
+export function isAllowedDatasetMimeType(contentTypeHeader: string | null): boolean {
+  if (!contentTypeHeader) return true; // Some raw file CDNs omit content-type
+  const mime = contentTypeHeader.split(";")[0].trim().toLowerCase();
+  return (
+    mime === "text/csv" ||
+    mime === "text/plain" ||
+    mime === "text/tab-separated-values" ||
+    mime === "text/markdown" ||
+    mime === "application/json" ||
+    mime === "application/csv" ||
+    mime === "application/octet-stream"
+  );
 }

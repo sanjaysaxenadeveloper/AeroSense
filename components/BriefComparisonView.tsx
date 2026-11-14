@@ -64,6 +64,7 @@ export function BriefComparisonView({
   return (
     <section
       id="section-compare"
+      aria-busy={isLoading}
       className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7"
     >
       <div className="flex flex-col lg:flex-row lg:items-end justify-between pb-5 border-b border-slate-200 gap-4">
@@ -239,7 +240,7 @@ export function BriefComparisonView({
           {/* Trajectory Overview */}
           <div className="pb-5 border-b border-slate-200 flex flex-col md:flex-row md:items-start justify-between gap-4">
             <div className="max-w-3xl">
-              <span className="text-xs font-semibold text-slate-500">
+              <span className="text-xs font-semibold text-slate-600">
                 Delta Summary ({comparisonResult.previous_brief_date} →{" "}
                 {comparisonResult.current_brief_date})
               </span>
@@ -253,9 +254,9 @@ export function BriefComparisonView({
               )}`}
             >
               {comparisonResult.overall_trend === "IMPROVING" ? (
-                <TrendingDown className="w-3.5 h-3.5" />
+                <TrendingDown className="w-3.5 h-3.5" aria-hidden="true" />
               ) : (
-                <TrendingUp className="w-3.5 h-3.5" />
+                <TrendingUp className="w-3.5 h-3.5" aria-hidden="true" />
               )}
               <span>Trajectory: {comparisonResult.overall_trend}</span>
             </span>
@@ -264,9 +265,9 @@ export function BriefComparisonView({
           {/* 3-Column Hotspot Dynamics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pb-5 border-b border-slate-200">
             <div>
-              <h4 className="text-xs font-semibold text-[#0D6E5C] mb-2">
+              <h3 className="text-xs font-semibold text-[#0D6E5C] mb-2">
                 Resolved / Mitigated ({comparisonResult.resolved_hotspots.length})
-              </h4>
+              </h3>
               {comparisonResult.resolved_hotspots.length > 0 ? (
                 <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside">
                   {comparisonResult.resolved_hotspots.map((h, i) => (
@@ -274,14 +275,14 @@ export function BriefComparisonView({
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-slate-500 italic">No resolved hotspots detected.</p>
+                <p className="text-xs text-slate-600 italic">No resolved hotspots detected.</p>
               )}
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold text-red-700 mb-2">
+              <h3 className="text-xs font-semibold text-red-700 mb-2">
                 Newly Emerged ({comparisonResult.new_hotspots.length})
-              </h4>
+              </h3>
               {comparisonResult.new_hotspots.length > 0 ? (
                 <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside">
                   {comparisonResult.new_hotspots.map((h, i) => (
@@ -289,14 +290,14 @@ export function BriefComparisonView({
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-slate-500 italic">No new hotspots emerged.</p>
+                <p className="text-xs text-slate-600 italic">No new hotspots emerged.</p>
               )}
             </div>
 
             <div>
-              <h4 className="text-xs font-semibold text-amber-700 mb-2">
+              <h3 className="text-xs font-semibold text-amber-800 mb-2">
                 Persistent Chronic ({comparisonResult.persistent_hotspots.length})
-              </h4>
+              </h3>
               {comparisonResult.persistent_hotspots.length > 0 ? (
                 <ul className="text-xs text-slate-700 space-y-1.5 list-disc list-inside">
                   {comparisonResult.persistent_hotspots.map((h, i) => (
@@ -304,16 +305,16 @@ export function BriefComparisonView({
                   ))}
                 </ul>
               ) : (
-                <p className="text-xs text-slate-500 italic">None</p>
+                <p className="text-xs text-slate-600 italic">None</p>
               )}
             </div>
           </div>
 
           {/* Intervention Efficacy Assessment */}
           <div>
-            <h4 className="text-xs font-semibold text-slate-500 mb-1">
+            <h3 className="text-xs font-semibold text-slate-600 mb-1">
               Intervention Efficacy Assessment
-            </h4>
+            </h3>
             <p className="text-sm text-slate-800 leading-relaxed">
               {comparisonResult.intervention_efficacy_assessment}
             </p>

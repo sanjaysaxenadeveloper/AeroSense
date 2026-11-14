@@ -140,9 +140,27 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
     onAnalyze(rawText, briefTitle.trim());
   };
 
+  const handleSourceTabKeyDown = (e: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (e.key === "ArrowRight" || e.key === "ArrowLeft" || e.key === "Home" || e.key === "End") {
+      e.preventDefault();
+      const next: DatasetSourceMode =
+        e.key === "Home"
+          ? "hf_aqi_india"
+          : e.key === "End"
+          ? "custom_url"
+          : sourceMode === "hf_aqi_india"
+          ? "custom_url"
+          : "hf_aqi_india";
+      setSourceMode(next);
+      setDatasetError(null);
+      document.getElementById(`tab-source-${next}`)?.focus();
+    }
+  };
+
   return (
     <section
       id="section-ingestion"
+      aria-busy={isLoading || isFetchingDataset}
       className="bg-white border border-slate-200 rounded-xl p-6 sm:p-7"
     >
       <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-5 border-b border-slate-200 gap-4">
@@ -190,14 +208,18 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
             className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 self-start sm:self-auto"
           >
             <button
+              id="tab-source-hf_aqi_india"
               type="button"
               role="tab"
               aria-selected={sourceMode === "hf_aqi_india"}
+              aria-controls="tabpanel-source-hf_aqi_india"
+              tabIndex={sourceMode === "hf_aqi_india" ? 0 : -1}
               onClick={() => {
                 setSourceMode("hf_aqi_india");
                 setDatasetError(null);
               }}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+              onKeyDown={handleSourceTabKeyDown}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
                 sourceMode === "hf_aqi_india"
                   ? "bg-[#0D6E5C] text-white"
                   : "text-slate-600 hover:text-slate-950"
@@ -206,14 +228,18 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
               Hugging Face CPCB
             </button>
             <button
+              id="tab-source-custom_url"
               type="button"
               role="tab"
               aria-selected={sourceMode === "custom_url"}
+              aria-controls="tabpanel-source-custom_url"
+              tabIndex={sourceMode === "custom_url" ? 0 : -1}
               onClick={() => {
                 setSourceMode("custom_url");
                 setDatasetError(null);
               }}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${
+              onKeyDown={handleSourceTabKeyDown}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0D6E5C] ${
                 sourceMode === "custom_url"
                   ? "bg-[#0D6E5C] text-white"
                   : "text-slate-600 hover:text-slate-950"
@@ -225,7 +251,12 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
         </div>
 
         {sourceMode === "hf_aqi_india" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+          <div
+            id="tabpanel-source-hf_aqi_india"
+            role="tabpanel"
+            aria-labelledby="tab-source-hf_aqi_india"
+            className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
+          >
             <div className="sm:col-span-5">
               <label
                 htmlFor="hf-city-select"
@@ -281,7 +312,12 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+          <div
+            id="tabpanel-source-custom_url"
+            role="tabpanel"
+            aria-labelledby="tab-source-custom_url"
+            className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end"
+          >
             <div className="sm:col-span-9">
               <label
                 htmlFor="custom-dataset-url"
@@ -319,8 +355,8 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
         )}
 
         {sourceMode === "hf_aqi_india" && !datasetError && !datasetNotice && (
-          <p className="text-[11px] text-slate-500">
-            Active CPCB coverage: 2018-01-01 to 2020-06-30 across 230 Indian stations (try <span className="font-mono text-slate-700">2019-11-03</span> vs <span className="font-mono text-slate-700">2019-11-06</span> to test multi-station spikes and brief comparison).
+          <p className="text-[11px] text-slate-600">
+            Active CPCB coverage: 2018-01-01 to 2020-06-30 across 230 Indian stations (try <span className="font-mono text-slate-800">2019-11-03</span> vs <span className="font-mono text-slate-800">2019-11-06</span> to test multi-station spikes and brief comparison).
           </p>
         )}
 
@@ -422,7 +458,7 @@ export function DataIngestionSection({ onAnalyze, isLoading }: DataIngestionProp
         </div>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
-          <p className="text-xs text-slate-500">
+          <p className="text-xs text-slate-600">
             Preprocessing standardizes units, assigns row tags (ROW_001), and flags missing or unreliable sensor readings before Gemini analysis.
           </p>
 
